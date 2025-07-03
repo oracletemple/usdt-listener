@@ -5,55 +5,70 @@ const { sendMessage } = require('./utils/telegram');
 const wallet = process.env.WALLET_ADDRESS;
 const userId = process.env.RECEIVER_ID;
 const amountThreshold = parseFloat(process.env.AMOUNT_THRESHOLD || '10');
+const runTest = process.env.RUN_TEST_MESSAGES === 'true';
 
 let lastTxID = null;
+let testCount = 0;
 
 async function checkTransactions() {
   console.log(`[DEBUG] checkTransactions() 被调用`);
 
-  try {
-    const url = `https://apilist.tronscan.org/api/token_trc20/transfers?limit=50&sort=-timestamp&toAddress=${wallet}`;
-    console.log(`[DEBUG] 请求 URL: ${url}`);
+  if (!wallet || !userId) {
+    console.error('❌ WALLET_ADDRESS 或 RECEIVER_ID 缺失');
+    return;
+  }
 
+  try {
+    const url = `https://apilist.tronscanapi.com/api/token_trc20/transfers?limit=20&sort=-timestamp&toAddress=${wallet}`;
     const res = await axios.get(url);
     const txs = res.data?.token_transfers || [];
 
-    console.log(`[DEBUG] 共拉取 ${txs.length} 条交易`);
+    console.log(`[DEBUG] 拉取到 ${txs.length} 条交易`);
 
     for (const tx of txs) {
       const hash = tx.transaction_id;
       if (!tx || tx.to_address !== wallet) continue;
-      if ((tx.contractRet || tx.finalResult) !== 'SUCCESS') continue;
+      if (tx.finalResult && tx.finalResult !== 'SUCCESS') continue;
       if ((tx.tokenAbbr || tx.tokenInfo?.tokenAbbr) !== 'USDT') continue;
 
-      const amount = parseFloat(tx.quant || tx.amount_str) / Math.pow(10, tx.tokenInfo?.tokenDecimal || 6);
-      console.log(`[DEBUG] 交易: ${hash} - 金额 ${amount} USDT`);
+      const amount = parseFloat(tx.quant || 0) / Math.pow(10, tx.tokenInfo?.tokenDecimal || 6);
+      console.log(`[DEBUG] 检查交易: ${hash} -> ${amount} USDT`);
 
-      // 去重逻辑可暂时注释掉以调试
-      // if (hash === lastTxID) break;
+      if (hash === lastTxID) break;
+      lastTxID = hash;
 
       if (amount >= amountThreshold) {
         const message = `✅ Payment received: ${amount} USDT (TRC20)\n\n🔮 Thank you for your offering. Your spiritual reading is now ready.`;
 
+        console.log(`[DEBUG] 触发发送：${amount} USDT`);
         try {
-          console.log(`[DEBUG] 尝试发送通知给 Telegram ID ${userId}`);
           await sendMessage(userId, message);
-          console.log(`[DEBUG] ✅ 已发送 TG 通知`);
+          console.log(`[DEBUG] sendMessage 调用完成 ✅`);
         } catch (err) {
-          console.error(`[ERROR] TG 发送失败 ❌`, err.message);
+          console.error(`[ERROR] sendMessage 失败 ❌`, err.message);
         }
 
-        lastTxID = hash;
         break;
       }
     }
   } catch (err) {
-    console.error(`[ERROR] 网络请求失败 ❌:`, err.message);
+    console.error('❌ 请求失败:', err.message);
   }
 }
 
+// 定时执行
 setInterval(() => {
   console.log(`[DEBUG] 每10秒触发检查: ${new Date().toISOString()}`);
+
+  if (runTest && testCount < 3) {
+    const testAmount = 10.01 + testCount;
+    const message = `✅ [测试] Payment received: ${testAmount.toFixed(2)} USDT (TRC20)\n\n🔮 Thank you for your offering.`;
+    sendMessage(userId, message)
+      .then(() => console.log(`[TEST] 成功发送测试消息 ${testCount + 1} ✅`))
+      .catch((err) => console.error(`[TEST] 测试消息失败 ❌`, err.message));
+    testCount++;
+  }
+
   checkTransactions();
 }, 10000);
 
