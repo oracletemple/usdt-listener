@@ -1,6 +1,6 @@
 require('dotenv').config();
 const axios = require('axios');
-const { sendMessage } = require('./telegram');
+const { sendMessage } = require('./utils/telegram');
 
 const wallet = process.env.WALLET_ADDRESS;
 const userId = process.env.RECEIVER_ID;
