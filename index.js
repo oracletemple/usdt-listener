@@ -9,7 +9,7 @@ const amountThreshold = parseFloat(process.env.AMOUNT_THRESHOLD || '12');
 const notifiedTxs = new Set();
 let testCount = 0;
 let testMode = true;
-
+const { generateThreeCardReading } = require('./utils/tarot');
 // 🧪 Simulated test transactions (3x12USDT + 3x30USDT)
 const testTransactions = [
   { amount: 12, hash: 'test_tx_001' },
@@ -35,12 +35,16 @@ async function handleTransaction({ amount, hash, isSuccess = true }) {
     message += `\n⚠️ Transaction failed. Please verify on-chain status.`;
   } else if (amount >= 29.9) {
     message += `\n🧠 You have unlocked the **Custom Oracle Reading**.\nPlease reply with your question – we will begin your spiritual decoding.`;
-  } else if (amount >= amountThreshold) {
-    message += `\n🔮 Thank you for your offering. Your divine reading is about to begin.\nPlease choose a number between 1 and 9 to activate your path.`;
+  } else if (amount >= amountThreshold && amount < 29.9) {
+  message += `\n🔮 Thank you for your offering. Your divine reading is below:\n\n`;
+  message += generateThreeCardReading();
   } else {
     message += `\n⚠️ Payment below minimum threshold (${amountThreshold} USDT). It will not be processed.`;
   }
-
+  if (testMode) {
+  message = `🧪 [TEST MODE]\n\n` + message;
+}
+  
   try {
     await sendMessage(userId, message);
     console.log(`[INFO] Message sent to Telegram ✅`);
