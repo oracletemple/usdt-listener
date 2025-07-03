@@ -61,6 +61,22 @@ async function checkTransactions() {
 // 定时执行
 setInterval(() => {
   console.log(`[DEBUG] 每10秒触发检查: ${new Date().toISOString()}`);
+  
+  async function checkTransactions() {
+  console.log(`[DEBUG] checkTransactions() 被调用`);
+
+  // ✅ 模拟测试交易（仅首次执行）
+  if (!global.__testSent__) {
+    const testAmount = 11.11;
+    const message = `✅ [测试] Payment received: ${testAmount} USDT (TRC20)\n\n🔮 Thank you for your offering. Your spiritual reading is now ready.`;
+    sendMessage(userId, message)
+      .then(() => console.log(`[TEST] 成功发送测试交易提醒 ✅`))
+      .catch(err => console.error(`[TEST] 测试消息失败 ❌`, err.message));
+    global.__testSent__ = true;
+  }
+
+  // ...其余 checkTransactions 原始逻辑保持不变
+
   checkTransactions();
 }, 10000);
 
