@@ -8,7 +8,6 @@ const amountThreshold = parseFloat(process.env.AMOUNT_THRESHOLD || '10');
 
 let lastTxID = null;
 
-// 增强版监听函数
 async function checkTransactions() {
   console.log(`[DEBUG] checkTransactions() 被调用`);
 
@@ -33,12 +32,14 @@ async function checkTransactions() {
       const amount = parseFloat(tx.amount_str || tx.amount) / Math.pow(10, tx.tokenDecimal || 6);
       console.log(`[DEBUG] 检查交易: ${hash} -> ${amount} USDT`);
 
-      if (hash === lastTxID) break;
+      // ⚠️ 注释掉去重逻辑，让每一笔符合的交易都触发消息（测试用）
+      // if (hash === lastTxID) break;
 
       if (amount >= amountThreshold) {
         const message = `✅ Payment received: ${amount} USDT (TRC20)\n\n🔮 Thank you for your offering. Your spiritual reading is now ready.`;
         await sendMessage(userId, message);
-        lastTxID = hash;
+        console.log(`[DEBUG] 消息已发送: ${hash}`);
+        // lastTxID = hash;
         break;
       }
     }
@@ -47,7 +48,6 @@ async function checkTransactions() {
   }
 }
 
-// 每 10 秒执行一次监听并打印时间戳
 setInterval(() => {
   console.log(`[DEBUG] 每10秒触发检查: ${new Date().toISOString()}`);
   checkTransactions();
