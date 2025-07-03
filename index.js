@@ -9,6 +9,7 @@ const runTest = process.env.RUN_TEST_MESSAGES === 'true';
 
 let lastTxID = null;
 let testCount = 0;
+const testLimit = 3;
 
 async function checkTransactions() {
   console.log(`[DEBUG] checkTransactions() 被调用`);
@@ -16,6 +17,25 @@ async function checkTransactions() {
   if (!wallet || !userId) {
     console.error('❌ WALLET_ADDRESS 或 RECEIVER_ID 缺失');
     return;
+  }
+
+  // ▶️ 模拟测试消息（最多3次）
+  if (runTest && testCount < testLimit) {
+    const testAmount = 10 + testCount;
+    const message = `✅ [测试] Payment received: ${testAmount.toFixed(2)} USDT (TRC20)\n\n🔮 Thank you for your offering.`;
+
+    try {
+      await sendMessage(userId, message);
+      console.log(`[TEST] 成功发送测试消息 ${testCount + 1} ✅`);
+    } catch (err) {
+      console.error(`[TEST] 测试消息发送失败 ❌`, err.message);
+    }
+
+    testCount++;
+    if (testCount >= testLimit) {
+      console.log(`[TEST] 已完成 ${testLimit} 次测试 ✅，即将进入正常监听...`);
+    }
+    return; // ⛔ 只测试时不执行真实监听
   }
 
   try {
@@ -34,20 +54,23 @@ async function checkTransactions() {
       const amount = parseFloat(tx.quant || 0) / Math.pow(10, tx.tokenInfo?.tokenDecimal || 6);
       console.log(`[DEBUG] 检查交易: ${hash} -> ${amount} USDT`);
 
-      if (hash === lastTxID) break;
-      lastTxID = hash;
+      // 🛑 跳过重复交易
+      if (hash === lastTxID) {
+        console.log(`[DEBUG] 跳过重复交易: ${hash}`);
+        break;
+      }
 
       if (amount >= amountThreshold) {
         const message = `✅ Payment received: ${amount} USDT (TRC20)\n\n🔮 Thank you for your offering. Your spiritual reading is now ready.`;
 
-        console.log(`[DEBUG] 触发发送：${amount} USDT`);
         try {
           await sendMessage(userId, message);
-          console.log(`[DEBUG] sendMessage 调用完成 ✅`);
+          console.log(`[DEBUG] 发送成功 ✅ hash=${hash}`);
         } catch (err) {
           console.error(`[ERROR] sendMessage 失败 ❌`, err.message);
         }
 
+        lastTxID = hash;
         break;
       }
     }
@@ -56,19 +79,8 @@ async function checkTransactions() {
   }
 }
 
-// 定时执行
 setInterval(() => {
   console.log(`[DEBUG] 每10秒触发检查: ${new Date().toISOString()}`);
-
-  if (runTest && testCount < 3) {
-    const testAmount = 10.01 + testCount;
-    const message = `✅ [测试] Payment received: ${testAmount.toFixed(2)} USDT (TRC20)\n\n🔮 Thank you for your offering.`;
-    sendMessage(userId, message)
-      .then(() => console.log(`[TEST] 成功发送测试消息 ${testCount + 1} ✅`))
-      .catch((err) => console.error(`[TEST] 测试消息失败 ❌`, err.message));
-    testCount++;
-  }
-
   checkTransactions();
 }, 10000);
 
