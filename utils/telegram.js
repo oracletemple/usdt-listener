@@ -91,6 +91,6 @@ async function answerCallback(callbackId, text) {
 
 module.exports = {
   sendMessage,
-  sendDrawCardButtons,
-  handleCallbackQuery,
+  sendTarotButtons, // ⬅️ 确保这一行存在
 };
+
