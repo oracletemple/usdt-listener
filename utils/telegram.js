@@ -73,5 +73,5 @@ async function handleDrawCard(callbackQuery) {
 module.exports = {
   sendMessage,
   sendTarotButtons,
-  handleDrawCard
+  handleDrawCard,
 };
