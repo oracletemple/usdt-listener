@@ -1,6 +1,9 @@
 require('dotenv').config();
 const axios = require('axios');
-const { sendMessage } = require('./utils/telegram');
+const express = require('express');
+const bodyParser = require('body-parser');
+const { sendMessage, sendDrawCardButtons, handleCallbackQuery } = require('./utils/telegram');
+const { generateThreeCardReading } = require('./utils/tarot');
 
 const wallet = process.env.WALLET_ADDRESS;
 const userId = process.env.RECEIVER_ID;
@@ -9,8 +12,8 @@ const amountThreshold = parseFloat(process.env.AMOUNT_THRESHOLD || '12');
 const notifiedTxs = new Set();
 let testCount = 0;
 let testMode = true;
-const { generateThreeCardReading } = require('./utils/tarot');
-// 🧪 Simulated test transactions (3x12USDT + 3x30USDT)
+
+// 💡 模拟 3 个 12USDT + 3 个 30USDT 的交易
 const testTransactions = [
   { amount: 12, hash: 'test_tx_001' },
   { amount: 12, hash: 'test_tx_002' },
@@ -20,7 +23,7 @@ const testTransactions = [
   { amount: 30, hash: 'test_tx_006' },
 ];
 
-// 🧠 Main message handler for any transaction
+// 🎯 主处理函数
 async function handleTransaction({ amount, hash, isSuccess = true }) {
   if (notifiedTxs.has(hash)) return;
   notifiedTxs.add(hash);
@@ -34,19 +37,18 @@ async function handleTransaction({ amount, hash, isSuccess = true }) {
   if (!isSuccess) {
     message += `\n⚠️ Transaction failed. Please verify on-chain status.`;
   } else if (amount >= 29.9) {
-    message += `\n🧠 You have unlocked the **Custom Oracle Reading**.\nPlease reply with your question – we will begin your spiritual decoding.`;
+    message += `\n🧘 You have unlocked the **Custom Oracle Reading**.\nPlease reply with your question – we will begin your spiritual decoding.`;
   } else if (amount >= amountThreshold && amount < 29.9) {
-  message += `\n🎴 Please focus your energy and draw 3 cards...\n`;
-  message += `\nTap the buttons below to reveal your Tarot Reading:`;
-  message += `\n\n👉 [Draw First Card]\n👉 [Draw Second Card]\n👉 [Draw Third Card]`;
-  message += `\n\n(Interactive reading coming soon...)`;
+    await sendDrawCardButtons(userId);
+    return;
   } else {
     message += `\n⚠️ Payment below minimum threshold (${amountThreshold} USDT). It will not be processed.`;
   }
+
   if (testMode) {
-  message = `🧪 [TEST MODE]\n\n` + message;
-}
-  
+    message = `🧪 [TEST MODE]\n\n` + message;
+  }
+
   try {
     await sendMessage(userId, message);
     console.log(`[INFO] Message sent to Telegram ✅`);
@@ -55,7 +57,7 @@ async function handleTransaction({ amount, hash, isSuccess = true }) {
   }
 }
 
-// ⏱️ Run test transactions every second
+// 🧪 启动测试交易模拟器
 const testInterval = setInterval(() => {
   if (testCount < testTransactions.length) {
     handleTransaction(testTransactions[testCount]);
@@ -63,51 +65,22 @@ const testInterval = setInterval(() => {
   } else {
     clearInterval(testInterval);
     testMode = false;
-    console.log(`✅ Test completed. Entering live monitoring mode...`);
   }
 }, 1000);
 
-// 🔍 Live chain listener
-async function checkTransactions() {
-  if (testMode) return;
+// 🚀 Express 接收 Telegram 按钮交互（/webhook/<BOT_TOKEN>）
+const app = express();
+app.use(bodyParser.json());
 
-  console.log(`[DEBUG] Running live check...`);
-
-  if (!wallet || !userId) {
-    console.error('❌ Missing WALLET_ADDRESS or RECEIVER_ID');
-    return;
+app.post(`/webhook/${process.env.BOT_TOKEN}`, async (req, res) => {
+  const body = req.body;
+  if (body.callback_query) {
+    await handleCallbackQuery(body.callback_query);
   }
+  res.sendStatus(200);
+});
 
-  try {
-    const url = `https://apilist.tronscanapi.com/api/token_trc20/transfers?limit=20&sort=-timestamp&toAddress=${wallet}`;
-    const res = await axios.get(url);
-    const txs = res.data?.token_transfers || [];
-
-    console.log(`[DEBUG] Retrieved ${txs.length} transactions`);
-
-    for (const tx of txs) {
-      const hash = tx.transaction_id;
-      if (!hash || tx.to_address !== wallet) continue;
-      if (notifiedTxs.has(hash)) continue;
-
-      const symbol = tx.tokenInfo?.tokenAbbr || tx.tokenAbbr || tx.symbol;
-      if (symbol !== 'USDT') continue;
-
-      const amount = parseFloat(tx.quant) / Math.pow(10, tx.tokenInfo?.tokenDecimal || 6);
-      const isSuccess = tx.finalResult === 'SUCCESS';
-
-      await handleTransaction({ amount, hash, isSuccess });
-    }
-  } catch (err) {
-    console.error(`❌ API request failed: ${err.message}`);
-  }
-}
-
-setInterval(() => {
-  if (!testMode) {
-    console.log(`[DEBUG] Triggering live scan at ${new Date().toISOString()}`);
-    checkTransactions();
-  }
-}, 10000);
-
-console.log('🚀 Listener started in TEST MODE: 6 simulated payments will trigger first.');
+const PORT = process.env.PORT || 3000;
+app.listen(PORT, () => {
+  console.log(`Tarot listener running on port ${PORT}`);
+});
