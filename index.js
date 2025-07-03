@@ -1,3 +1,10 @@
+console.log('[ENV DEBUG]', {
+  BOT_TOKEN: process.env.BOT_TOKEN,
+  WALLET_ADDRESS: process.env.WALLET_ADDRESS,
+  RECEIVER_ID: process.env.RECEIVER_ID,
+  AMOUNT_THRESHOLD: process.env.AMOUNT_THRESHOLD,
+});
+
 require('dotenv').config();
 const axios = require('axios');
 const { sendMessage } = require('./utils/telegram');
