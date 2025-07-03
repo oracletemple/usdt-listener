@@ -32,15 +32,23 @@ async function checkTransactions() {
       const amount = parseFloat(tx.amount_str || tx.amount) / Math.pow(10, tx.tokenDecimal || 6);
       console.log(`[DEBUG] 检查交易: ${hash} -> ${amount} USDT`);
 
-      // 去重逻辑先注释掉
+      // 临时关闭去重，强制每笔都处理
       // if (hash === lastTxID) break;
       console.log(`[DEBUG] 不跳过重复交易: ${hash}`);
 
       if (amount >= amountThreshold) {
         const message = `✅ Payment received: ${amount} USDT (TRC20)\n\n🔮 Thank you for your offering. Your spiritual reading is now ready.`;
-        console.log(`[DEBUG] 触发发送：${amount} USDT，hash: ${hash}`);
-        await sendMessage(userId, message);
-        console.log(`[DEBUG] 已触发 sendMessage(${userId})`);
+        console.log(`[DEBUG] 检查通过，准备发送消息：${hash} -> ${amount} USDT`);
+        console.log(`[DEBUG] 准备发送 Telegram 消息到 ${userId}`);
+        console.log(`[DEBUG] 消息内容: ${message}`);
+
+        try {
+          await sendMessage(userId, message);
+          console.log(`✅ Telegram 消息发送成功 -> ${userId}`);
+        } catch (err) {
+          console.error(`❌ Telegram 消息发送失败:`, err.message);
+        }
+
         lastTxID = hash;
         break;
       }
@@ -50,7 +58,7 @@ async function checkTransactions() {
   }
 }
 
-// 定时调度监听
+// 定时执行
 setInterval(() => {
   console.log(`[DEBUG] 每10秒触发检查: ${new Date().toISOString()}`);
   checkTransactions();
