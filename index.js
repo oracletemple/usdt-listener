@@ -36,8 +36,10 @@ async function handleTransaction({ amount, hash, isSuccess = true }) {
   } else if (amount >= 29.9) {
     message += `\n🧠 You have unlocked the **Custom Oracle Reading**.\nPlease reply with your question – we will begin your spiritual decoding.`;
   } else if (amount >= amountThreshold && amount < 29.9) {
-  message += `\n🔮 Thank you for your offering. Your divine reading is below:\n\n`;
-  message += generateThreeCardReading();
+  message += `\n🎴 Please focus your energy and draw 3 cards...\n`;
+  message += `\nTap the buttons below to reveal your Tarot Reading:`;
+  message += `\n\n👉 [Draw First Card]\n👉 [Draw Second Card]\n👉 [Draw Third Card]`;
+  message += `\n\n(Interactive reading coming soon...)`;
   } else {
     message += `\n⚠️ Payment below minimum threshold (${amountThreshold} USDT). It will not be processed.`;
   }
