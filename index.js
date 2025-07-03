@@ -5,11 +5,8 @@ const { sendMessage } = require('./utils/telegram');
 const wallet = process.env.WALLET_ADDRESS;
 const userId = process.env.RECEIVER_ID;
 const amountThreshold = parseFloat(process.env.AMOUNT_THRESHOLD || '10');
-const runTest = process.env.RUN_TEST_MESSAGES === 'true';
 
-let lastTxID = null;
-let testCount = 0;
-const testLimit = 3;
+const notifiedTxs = new Set(); // 记录已通知的交易哈希
 
 async function checkTransactions() {
   console.log(`[DEBUG] checkTransactions() 被调用`);
@@ -17,25 +14,6 @@ async function checkTransactions() {
   if (!wallet || !userId) {
     console.error('❌ WALLET_ADDRESS 或 RECEIVER_ID 缺失');
     return;
-  }
-
-  // ▶️ 模拟测试消息（最多3次）
-  if (runTest && testCount < testLimit) {
-    const testAmount = 10 + testCount;
-    const message = `✅ [测试] Payment received: ${testAmount.toFixed(2)} USDT (TRC20)\n\n🔮 Thank you for your offering.`;
-
-    try {
-      await sendMessage(userId, message);
-      console.log(`[TEST] 成功发送测试消息 ${testCount + 1} ✅`);
-    } catch (err) {
-      console.error(`[TEST] 测试消息发送失败 ❌`, err.message);
-    }
-
-    testCount++;
-    if (testCount >= testLimit) {
-      console.log(`[TEST] 已完成 ${testLimit} 次测试 ✅，即将进入正常监听...`);
-    }
-    return; // ⛔ 只测试时不执行真实监听
   }
 
   try {
@@ -47,32 +25,31 @@ async function checkTransactions() {
 
     for (const tx of txs) {
       const hash = tx.transaction_id;
-      if (!tx || tx.to_address !== wallet) continue;
-      if (tx.finalResult && tx.finalResult !== 'SUCCESS') continue;
-      if ((tx.tokenAbbr || tx.tokenInfo?.tokenAbbr) !== 'USDT') continue;
+      if (!hash || !tx.to_address || tx.to_address !== wallet) continue;
+      if (notifiedTxs.has(hash)) continue; // 跳过已通知
 
-      const amount = parseFloat(tx.quant || 0) / Math.pow(10, tx.tokenInfo?.tokenDecimal || 6);
-      console.log(`[DEBUG] 检查交易: ${hash} -> ${amount} USDT`);
+      const tokenSymbol = tx.tokenInfo?.tokenAbbr || tx.tokenAbbr || tx.symbol;
+      const amount = parseFloat(tx.quant) / Math.pow(10, tx.tokenInfo?.tokenDecimal || 6);
 
-      // 🛑 跳过重复交易
-      if (hash === lastTxID) {
-        console.log(`[DEBUG] 跳过重复交易: ${hash}`);
-        break;
+      const isSuccess = tx.finalResult === 'SUCCESS';
+
+      let message = `💸 收到一笔${isSuccess ? '' : '❌失败的'} USDT 转账:\n\n`;
+      message += `💰 数量: ${amount} USDT (TRC20)\n`;
+      message += `🔗 哈希: ${hash}\n`;
+      message += isSuccess
+        ? `\n🔮 谢谢你的奉献，解读即将开始...`
+        : `\n⚠️ 交易失败，可能未到账，请检查区块链状态`;
+
+      console.log(`[DEBUG] 检查交易: ${hash} -> ${amount} USDT 状态: ${tx.finalResult}`);
+
+      try {
+        await sendMessage(userId, message);
+        console.log(`[INFO] ✅ Message sent to ${userId}`);
+      } catch (err) {
+        console.error(`[ERROR] ❌ sendMessage 失败:`, err.message);
       }
 
-      if (amount >= amountThreshold) {
-        const message = `✅ Payment received: ${amount} USDT (TRC20)\n\n🔮 Thank you for your offering. Your spiritual reading is now ready.`;
-
-        try {
-          await sendMessage(userId, message);
-          console.log(`[DEBUG] 发送成功 ✅ hash=${hash}`);
-        } catch (err) {
-          console.error(`[ERROR] sendMessage 失败 ❌`, err.message);
-        }
-
-        lastTxID = hash;
-        break;
-      }
+      notifiedTxs.add(hash); // 标记为已处理
     }
   } catch (err) {
     console.error('❌ 请求失败:', err.message);
