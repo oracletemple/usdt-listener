@@ -1,3 +1,7 @@
+// ✅ 修复版本 index.js
+// 📁 放置位置：usdt-listener/index.js
+// ⚠️ 此版本会通过网络调用 simulate-click 接口，由 tarot-handler Web Service 执行模拟交互
+
 require('dotenv').config();
 const axios = require('axios');
 const { sendMessage, sendTarotButtons } = require('./utils/telegram');
@@ -5,7 +9,7 @@ const { sendMessage, sendTarotButtons } = require('./utils/telegram');
 const wallet = process.env.WALLET_ADDRESS;
 const userId = process.env.RECEIVER_ID;
 const amountThreshold = parseFloat(process.env.AMOUNT_THRESHOLD || '12');
-const webhookUrl = process.env.WEBHOOK_URL || 'https://tarot-handler.onrender.com/simulate-click';
+const tarotHandlerURL = process.env.TAROT_HANDLER_URL || 'https://tarot-handler.onrender.com';
 
 const notifiedTxs = new Set();
 let testCount = 0;
@@ -13,29 +17,26 @@ let testMode = true;
 
 // Simulated test transactions (3x12USDT + 3x30USDT)
 const testTransactions = [
-  { amount: 12, hash: 'test_tx_001' }, // 模拟抽牌交互（card 3）
-  { amount: 12, hash: 'test_tx_002' }, // 模拟抽牌交互（card 3）
-  { amount: 12, hash: 'test_tx_003' }, // 手动交互
-  { amount: 30, hash: 'test_tx_004' }, // 高端提示 + 模拟抽牌（card 3）
-  { amount: 30, hash: 'test_tx_005' }, // 高端提示 + 模拟抽牌（card 3）
-  { amount: 30, hash: 'test_tx_006' }, // 手动交互
+  { amount: 12, hash: 'test_tx_001' },
+  { amount: 12, hash: 'test_tx_002' },
+  { amount: 12, hash: 'test_tx_003' },
+  { amount: 30, hash: 'test_tx_004' },
+  { amount: 30, hash: 'test_tx_005' },
+  { amount: 30, hash: 'test_tx_006' },
 ];
 
-// 模拟点击按钮抽牌
-async function simulateButtonClick(chatId, cardKey) {
-  const cardIndex = cardKey === 'card_1' ? 2 : 0; // 默认模拟的是第三张
+async function simulateClick(chatId, cardIndex) {
   try {
-    const res = await axios.post(webhookUrl, {
+    const response = await axios.post(`${tarotHandlerURL}/simulate-click`, {
       chatId,
       cardIndex,
     });
-    console.log('[INFO] Simulate click success:', res.data);
+    console.log('[INFO] Simulate click success:', response.data);
   } catch (err) {
-    console.error('[ERROR] Failed to simulate button click:', err.message);
+    console.error('[ERROR] Simulate button click failed:', err.message);
   }
 }
 
-// 🌺 Main message handler for any transaction
 async function handleTransaction({ amount, hash, isSuccess = true }) {
   if (notifiedTxs.has(hash)) return;
   notifiedTxs.add(hash);
@@ -51,8 +52,7 @@ async function handleTransaction({ amount, hash, isSuccess = true }) {
   } else if (amount >= 29.9) {
     message += `\n🧠 You have unlocked the **Custom Oracle Reading**.\nPlease reply with your question – we will begin your spiritual decoding.`;
   } else if (amount >= amountThreshold && amount < 29.9) {
-    message += `\n🔮 Please focus your energy and draw 3 cards...\n`;
-    message += `👇 Tap the buttons to reveal your Tarot Reading:`;
+    message += `\n🔮 Please focus your energy and draw 3 cards...\n👇 Tap the buttons to reveal your Tarot Reading:`;
   } else {
     message += `\n⚠️ Payment below minimum threshold (${amountThreshold} USDT). It will not be processed.`;
   }
@@ -65,13 +65,20 @@ async function handleTransaction({ amount, hash, isSuccess = true }) {
     await sendMessage(userId, message);
     if (amount < 29.9 && isSuccess) {
       await sendTarotButtons(userId);
-    } else if (amount >= 29.9 && isSuccess) {
-      await sendTarotButtons(userId); // 高端同样具备按钮互动
     }
 
-    // ✅ 模拟按钮点击交互
-    if (['test_tx_001', 'test_tx_002', 'test_tx_004', 'test_tx_005'].includes(hash)) {
-      setTimeout(() => simulateButtonClick(userId, 'card_1'), 2000);
+    // ✅ 按照要求模拟前两次 12 和前两次 30 的交互抽牌
+    if (hash === 'test_tx_001') {
+      setTimeout(() => simulateClick(userId, 2), 2000); // 模拟点击第3张
+    }
+    if (hash === 'test_tx_002') {
+      setTimeout(() => simulateClick(userId, 2), 2000);
+    }
+    if (hash === 'test_tx_004') {
+      setTimeout(() => simulateClick(userId, 2), 2000);
+    }
+    if (hash === 'test_tx_005') {
+      setTimeout(() => simulateClick(userId, 2), 2000);
     }
 
     console.log(`[INFO] Message sent to Telegram ✅`);
