@@ -1,5 +1,3 @@
-// index.js for usdt-listener
-
 require('dotenv').config();
 const axios = require('axios');
 const { sendMessage, sendTarotButtons } = require('./utils/telegram');
@@ -7,33 +5,37 @@ const { sendMessage, sendTarotButtons } = require('./utils/telegram');
 const wallet = process.env.WALLET_ADDRESS;
 const userId = process.env.RECEIVER_ID;
 const amountThreshold = parseFloat(process.env.AMOUNT_THRESHOLD || '12');
+const webhookUrl = process.env.WEBHOOK_URL || 'https://tarot-handler.onrender.com/simulate-click';
 
 const notifiedTxs = new Set();
 let testCount = 0;
 let testMode = true;
 
-const simulateButtonClick = async (chatId, cardCode = 'card_3') => {
+// Simulated test transactions (3x12USDT + 3x30USDT)
+const testTransactions = [
+  { amount: 12, hash: 'test_tx_001' }, // 模拟抽牌交互（card 3）
+  { amount: 12, hash: 'test_tx_002' }, // 模拟抽牌交互（card 3）
+  { amount: 12, hash: 'test_tx_003' }, // 手动交互
+  { amount: 30, hash: 'test_tx_004' }, // 高端提示 + 模拟抽牌（card 3）
+  { amount: 30, hash: 'test_tx_005' }, // 高端提示 + 模拟抽牌（card 3）
+  { amount: 30, hash: 'test_tx_006' }, // 手动交互
+];
+
+// 模拟点击按钮抽牌
+async function simulateButtonClick(chatId, cardKey) {
+  const cardIndex = cardKey === 'card_1' ? 2 : 0; // 默认模拟的是第三张
   try {
-    await axios.post('https://tarot-handler.onrender.com/simulate-click', {
+    const res = await axios.post(webhookUrl, {
       chatId,
-      cardIndex: cardCode === 'card_1' ? 0 : cardCode === 'card_2' ? 1 : 2,
+      cardIndex,
     });
+    console.log('[INFO] Simulate click success:', res.data);
   } catch (err) {
     console.error('[ERROR] Failed to simulate button click:', err.message);
   }
-};
+}
 
-// 📦 模拟交易数据（3 x 12USDT + 3 x 30USDT）
-const testTransactions = [
-  { amount: 12, hash: 'test_tx_001' }, // 展示按钮并模拟点击
-  { amount: 12, hash: 'test_tx_002' }, // 展示按钮并模拟点击
-  { amount: 12, hash: 'test_tx_003' }, // 展示按钮但不点击（你自己测试）
-  { amount: 30, hash: 'test_tx_004' }, // 展示按钮 + 高端提示
-  { amount: 30, hash: 'test_tx_005' }, // 展示按钮 + 模拟点击
-  { amount: 30, hash: 'test_tx_006' }, // 展示按钮（你自己操作）
-];
-
-// 🧠 主交易处理逻辑
+// 🌺 Main message handler for any transaction
 async function handleTransaction({ amount, hash, isSuccess = true }) {
   if (notifiedTxs.has(hash)) return;
   notifiedTxs.add(hash);
@@ -47,12 +49,10 @@ async function handleTransaction({ amount, hash, isSuccess = true }) {
   if (!isSuccess) {
     message += `\n⚠️ Transaction failed. Please verify on-chain status.`;
   } else if (amount >= 29.9) {
+    message += `\n🧠 You have unlocked the **Custom Oracle Reading**.\nPlease reply with your question – we will begin your spiritual decoding.`;
+  } else if (amount >= amountThreshold && amount < 29.9) {
     message += `\n🔮 Please focus your energy and draw 3 cards...\n`;
-    message += `👇 Tap the buttons to reveal your Tarot Reading.\n\n`;
-    message += `🧠 You have unlocked the *Custom Oracle Reading*.\nPlease reply with your question – we will begin your spiritual decoding.`;
-  } else if (amount >= amountThreshold) {
-    message += `\n🔮 Please focus your energy and draw 3 cards...\n`;
-    message += `👇 Tap the buttons to reveal your Tarot Reading.`;
+    message += `👇 Tap the buttons to reveal your Tarot Reading:`;
   } else {
     message += `\n⚠️ Payment below minimum threshold (${amountThreshold} USDT). It will not be processed.`;
   }
@@ -63,15 +63,14 @@ async function handleTransaction({ amount, hash, isSuccess = true }) {
 
   try {
     await sendMessage(userId, message);
-    if (amount >= amountThreshold && isSuccess) {
+    if (amount < 29.9 && isSuccess) {
       await sendTarotButtons(userId);
+    } else if (amount >= 29.9 && isSuccess) {
+      await sendTarotButtons(userId); // 高端同样具备按钮互动
     }
 
-    if (['test_tx_001', 'test_tx_002'].includes(hash)) {
-      setTimeout(() => simulateButtonClick(userId, 'card_3'), 2000);
-    }
-
-    if (hash === 'test_tx_005') {
+    // ✅ 模拟按钮点击交互
+    if (['test_tx_001', 'test_tx_002', 'test_tx_004', 'test_tx_005'].includes(hash)) {
       setTimeout(() => simulateButtonClick(userId, 'card_1'), 2000);
     }
 
@@ -81,7 +80,7 @@ async function handleTransaction({ amount, hash, isSuccess = true }) {
   }
 }
 
-// 🔁 自动触发模拟交易（每1秒一笔）
+// ⏱️ Run test transactions every second
 const testInterval = setInterval(() => {
   if (testCount < testTransactions.length) {
     handleTransaction(testTransactions[testCount]);
