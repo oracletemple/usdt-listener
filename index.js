@@ -1,38 +1,4 @@
-// ✅ Web Service: tarot-handler/index.js (v1.1.0)
-require('dotenv').config();
-const express = require('express');
-const bodyParser = require('body-parser');
-const { handleDrawCard } = require('./utils/telegram');
-
-const app = express();
-app.use(bodyParser.json());
-const PORT = process.env.PORT || 3000;
-
-// ✅ 按钮互动回调处理
-app.post('/webhook', async (req, res) => {
-  const body = req.body;
-  if (body.callback_query) {
-    try {
-      await handleDrawCard(body.callback_query);
-      return res.sendStatus(200);
-    } catch (err) {
-      console.error('[ERROR] handleDrawCard failed:', err.message);
-      return res.sendStatus(500);
-    }
-  }
-  res.sendStatus(200);
-});
-
-app.get('/', (req, res) => {
-  res.send('Tarot Webhook Server is running.');
-});
-
-app.listen(PORT, () => {
-  console.log(`🚀 Tarot Webhook Server running at http://localhost:${PORT}`);
-});
-
-
-// ✅ Background Worker: usdt-listener/index.js (v1.1.0)
+// v1.1.1
 require('dotenv').config();
 const axios = require('axios');
 const { sendMessage, sendTarotButtons, simulateButtonClick } = require('./utils/telegram');
@@ -41,24 +7,27 @@ const { startSession } = require('./utils/tarot-session');
 const wallet = process.env.WALLET_ADDRESS;
 const userId = process.env.RECEIVER_ID;
 const amountThreshold = parseFloat(process.env.AMOUNT_THRESHOLD || '12');
-const webhookUrl = process.env.WEBHOOK_URL;
 
 const notifiedTxs = new Set();
 let testCount = 0;
 let testMode = true;
 
+// ✅ 模拟交易列表（含互动按钮点击测试）
 const testTransactions = [
-  { amount: 12, hash: 'test_tx_001' },
-  { amount: 12, hash: 'test_tx_002' },
-  { amount: 12, hash: 'test_tx_003' },
-  { amount: 30, hash: 'test_tx_004' },
-  { amount: 30, hash: 'test_tx_005' },
-  { amount: 30, hash: 'test_tx_006' }
+  { amount: 12, hash: 'test_tx_001' }, // 自动模拟点击按钮
+  { amount: 12, hash: 'test_tx_002' }, // 自动模拟点击按钮
+  { amount: 12, hash: 'test_tx_003' }, // 不自动点击，供人工测试
+  { amount: 30, hash: 'test_tx_004' }, // 自动模拟点击按钮 + 高端提示
+  { amount: 30, hash: 'test_tx_005' }, // 自动模拟点击按钮 + 高端提示
+  { amount: 30, hash: 'test_tx_006' }, // 不自动点击，供人工测试
 ];
 
+// 🌟 主处理逻辑
 async function handleTransaction({ amount, hash, isSuccess = true }) {
   if (notifiedTxs.has(hash)) return;
   notifiedTxs.add(hash);
+
+  console.log(`[TEST] Simulated Tx: ${hash} -> ${amount} USDT`);
 
   let message = `💸 Payment ${isSuccess ? 'received' : 'failed'}:\n\n`;
   message += `💰 Amount: ${amount} USDT (TRC20)\n`;
@@ -88,22 +57,18 @@ async function handleTransaction({ amount, hash, isSuccess = true }) {
       await sendTarotButtons(userId);
     }
 
-    if (['test_tx_001', 'test_tx_002', 'test_tx_004', 'test_tx_005'].includes(hash)) {
-      await axios.post(`${webhookUrl}/webhook`, {
-        callback_query: {
-          id: 'simulate_' + Date.now(),
-          from: { id: userId },
-          message: { chat: { id: userId } },
-          data: 'card_3'
-        }
-      });
+    const shouldSimulate = ['test_tx_001', 'test_tx_002', 'test_tx_004', 'test_tx_005'].includes(hash);
+    if (shouldSimulate) {
+      setTimeout(() => simulateButtonClick(userId, 'card_3'), 3000);
     }
-    console.log('[INFO] Message sent to Telegram ✅');
+
+    console.log(`[INFO] Message sent to Telegram ✅`);
   } catch (err) {
-    console.error('[ERROR] Failed to send message:', err.message);
+    console.error(`[ERROR] Failed to send message: ${err.message}`);
   }
 }
 
+// ⏱️ 测试执行器（每秒处理一条）
 const testInterval = setInterval(() => {
   if (testCount < testTransactions.length) {
     handleTransaction(testTransactions[testCount]);
