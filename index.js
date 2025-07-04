@@ -1,66 +1,96 @@
-// v1.1.0
+// v1.0.11
 require('dotenv').config();
+const express = require('express');
 const axios = require('axios');
-const { sendMessage, sendTarotButtons, simulateButtonClick } = require('./utils/telegram');
-const { startSession } = require('./utils/tarot-session');
+const bodyParser = require('body-parser');
 
-const wallet = process.env.WALLET_ADDRESS;
-const userId = process.env.RECEIVER_ID;
-const amountThreshold = parseFloat(process.env.AMOUNT_THRESHOLD || '10');
+const { sendTarotButtons, sendCustomReading } = require('./utils/telegram');
+const app = express();
+app.use(bodyParser.json());
 
-const notifiedTxs = new Set();
-const testTransactions = [
-  { amount: 12, hash: 'test_tx_001' },
-  { amount: 12, hash: 'test_tx_002' },
-  { amount: 12, hash: 'test_tx_003' },
-  { amount: 30, hash: 'test_tx_004' },
-  { amount: 30, hash: 'test_tx_005' },
-  { amount: 30, hash: 'test_tx_006' }
-];
+const PORT = process.env.PORT || 3000;
+const BOT_TOKEN = process.env.BOT_TOKEN;
+const WEBHOOK_URL = process.env.WEBHOOK_URL;
+const AMOUNT_THRESHOLD = parseFloat(process.env.AMOUNT_THRESHOLD || '10');
 
-async function handleTransaction({ amount, hash, isSuccess = true }) {
-  if (notifiedTxs.has(hash)) return;
-  notifiedTxs.add(hash);
+let testModeExecuted = false;
 
-  let message = `🧪 TEST MODE\n\n💸 Payment ${isSuccess ? 'received' : 'failed'}:\n\n`;
-  message += `💰 Amount: ${amount} USDT (TRC20)\n`;
-  message += `🔗 Tx Hash: ${hash}\n`;
+app.post('/webhook', async (req, res) => {
+  const tx = req.body;
 
-  if (!isSuccess) {
-    message += `\n⚠️ Transaction failed. Please verify on-chain status.`;
-  } else if (amount >= 29.9) {
-    message += `\n🧠 You have unlocked the *Custom Oracle Reading*.\nPlease reply with your question – we will begin your spiritual decoding.`;
-    message += `\n\n🔮 Bonus: You also receive a 3-card Tarot Reading below:`;
-  } else if (amount >= amountThreshold) {
-    message += `\n🔮 Please focus your energy and draw 3 cards...`;
-    message += `\n👇 Tap the buttons to reveal your Tarot Reading:`;
-  } else {
-    message += `\n⚠️ Payment below minimum threshold (${amountThreshold} USDT).`;
-  }
+  const userId = process.env.RECEIVER_ID;
+  const amount = parseFloat(tx.amount);
 
   try {
-    await sendMessage(userId, message);
-
-    if (amount >= amountThreshold) {
-      startSession(userId);
-      await sendTarotButtons(userId);
+    if (amount >= 30) {
+      await sendCustomReading(userId, tx.hash, amount, true);
+    } else if (amount >= AMOUNT_THRESHOLD) {
+      await sendTarotButtons(userId, tx.hash, true);
     }
-
-    if (['test_tx_001', 'test_tx_002', 'test_tx_004', 'test_tx_005'].includes(hash)) {
-      setTimeout(() => simulateButtonClick(userId, 'card_3'), 3000);
-    }
-
-    console.log(`[INFO] Message sent for ${hash}`);
+    res.sendStatus(200);
   } catch (err) {
-    console.error(`[ERROR] Failed for ${hash}: ${err.message}`);
+    console.error('[ERROR] Failed to process webhook:', err.message);
+    res.sendStatus(500);
   }
-}
+});
 
-// ✅ 仅部署时测试一次
-(async () => {
-  for (let tx of testTransactions) {
-    await handleTransaction(tx);
-    await new Promise(res => setTimeout(res, 1000));
+app.get('/simulate-click', async (req, res) => {
+  const { userId, index } = req.query;
+  try {
+    const clickRes = await axios.post(`${WEBHOOK_URL}/draw-card`, {
+      userId,
+      index: parseInt(index, 10),
+    });
+    res.send(`Simulate click success: ${clickRes.statusText}`);
+  } catch (err) {
+    console.error('[ERROR] Simulate click failed:', err.message);
+    res.status(500).send(err.message);
   }
-  console.log('[INFO] Test mode complete. Now entering live mode.');
-})();
+});
+
+app.listen(PORT, async () => {
+  console.log(`🚀 Tarot Webhook Server running at http://localhost:${PORT}`);
+
+  if (!testModeExecuted) {
+    testModeExecuted = true;
+    console.log('[TEST] Running testTransactions...');
+
+    const txs = [
+      { hash: 'test_tx_001', amount: 12 },
+      { hash: 'test_tx_002', amount: 12 },
+      { hash: 'test_tx_003', amount: 12 },
+      { hash: 'test_tx_004', amount: 30 },
+      { hash: 'test_tx_005', amount: 30 },
+      { hash: 'test_tx_006', amount: 30 },
+    ];
+
+    for (let i = 0; i < txs.length; i++) {
+      const tx = txs[i];
+      try {
+        const userId = process.env.RECEIVER_ID;
+        if (tx.amount >= 30) {
+          await sendCustomReading(userId, tx.hash, tx.amount, true);
+        } else {
+          await sendTarotButtons(userId, tx.hash, true);
+        }
+        console.log(`[INFO] Message sent for ${tx.hash}`);
+      } catch (e) {
+        console.error(`[ERROR] Failed to send for ${tx.hash}:`, e.message);
+      }
+
+      // 只模拟前两个点击
+      if ((i === 0 || i === 1 || i === 3 || i === 4)) {
+        try {
+          const clickIndex = i % 3; // 模拟点击三张牌之一
+          await axios.get(`${WEBHOOK_URL}/simulate-click`, {
+            params: { userId: process.env.RECEIVER_ID, index: clickIndex },
+          });
+        } catch (e) {
+          console.error('[ERROR] Simulate click failed:', e.message);
+        }
+      }
+    }
+
+    console.log('[INFO] Test mode complete. Now entering live mode.');
+  }
+});
