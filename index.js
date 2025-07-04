@@ -1,27 +1,41 @@
-// v1.0.6
+// index.js - v1.0.7
 require('dotenv').config();
 const axios = require('axios');
-const { sendMessage, sendTarotButtons, simulateButtonClick } = require('./utils/telegram');
+const { sendMessage, sendTarotButtons } = require('./utils/telegram');
 
 const wallet = process.env.WALLET_ADDRESS;
 const userId = process.env.RECEIVER_ID;
 const amountThreshold = parseFloat(process.env.AMOUNT_THRESHOLD || '12');
+const handlerUrl = process.env.HANDLER_URL || 'https://tarot-handler.onrender.com';
 
 const notifiedTxs = new Set();
 let testCount = 0;
 let testMode = true;
 
-// ✅ 模拟交易（前3个12 USDT，后3个30 USDT）
+// 🧪 模拟测试交易：3个 12 USDT（基础档）+ 3个 30 USDT（高端档）
 const testTransactions = [
-  { amount: 12, hash: 'test_tx_001' }, // 模拟按钮并抽牌
-  { amount: 12, hash: 'test_tx_002' }, // 模拟按钮并抽牌
-  { amount: 12, hash: 'test_tx_003' }, // 留作你手动操作测试
-  { amount: 30, hash: 'test_tx_004' }, // 模拟按钮并抽牌
-  { amount: 30, hash: 'test_tx_005' }, // 模拟按钮并抽牌
-  { amount: 30, hash: 'test_tx_006' }, // 留作你手动操作测试
+  { amount: 12, hash: 'test_tx_001' }, // 发送按钮 + 模拟交互
+  { amount: 12, hash: 'test_tx_002' }, // 发送按钮 + 模拟交互
+  { amount: 12, hash: 'test_tx_003' }, // 手动测试交互
+  { amount: 30, hash: 'test_tx_004' }, // 高端内容 + 模拟交互
+  { amount: 30, hash: 'test_tx_005' }, // 高端内容 + 模拟交互
+  { amount: 30, hash: 'test_tx_006' }, // 高端内容 + 手动测试
 ];
 
-// ✅ 主函数：处理到账交易
+// 🌐 调用模拟按钮接口
+async function simulateButtonClick(chatId, cardIndex) {
+  try {
+    const res = await axios.post(`${handlerUrl}/simulate-click`, {
+      chatId,
+      cardIndex,
+    });
+    console.log(`[INFO] Simulate click success:`, res.data);
+  } catch (err) {
+    console.error(`[ERROR] Simulate button click failed:`, err.message);
+  }
+}
+
+// 🎯 主逻辑：处理每一笔交易
 async function handleTransaction({ amount, hash, isSuccess = true }) {
   if (notifiedTxs.has(hash)) return;
   notifiedTxs.add(hash);
@@ -35,10 +49,10 @@ async function handleTransaction({ amount, hash, isSuccess = true }) {
   if (!isSuccess) {
     message += `\n⚠️ Transaction failed. Please verify on-chain status.`;
   } else if (amount >= 29.9) {
-    message += `\n🧠 You have unlocked the **Custom Oracle Reading**.\nPlease reply with your question – we will begin your spiritual decoding.`;
-  } else if (amount >= amountThreshold && amount < 29.9) {
-    message += `\n🔮 Please focus your energy and draw 3 cards...\n`;
-    message += `👇 Tap the buttons to reveal your Tarot Reading:`;
+    message += `\n🧠 You have unlocked the *Custom Oracle Reading*.\nPlease reply with your question – we will begin your spiritual decoding.`;
+    message += `\n\n🔮 Please focus your energy and draw 3 cards...\n👇 Tap the buttons to reveal your Tarot Reading:`;
+  } else if (amount >= amountThreshold) {
+    message += `\n🔮 Please focus your energy and draw 3 cards...\n👇 Tap the buttons to reveal your Tarot Reading:`;
   } else {
     message += `\n⚠️ Payment below minimum threshold (${amountThreshold} USDT). It will not be processed.`;
   }
@@ -50,15 +64,16 @@ async function handleTransaction({ amount, hash, isSuccess = true }) {
   try {
     await sendMessage(userId, message);
 
-    // ✅ 两档都展示按钮
-    if (amount >= amountThreshold && isSuccess) {
+    // 👉 所有符合条件的用户都发送按钮
+    if (amount >= amountThreshold) {
       await sendTarotButtons(userId);
     }
 
-    // ✅ 模拟点击逻辑（只自动测试前两个12和30的）
-    if (["test_tx_001", "test_tx_002", "test_tx_004", "test_tx_005"].includes(hash)) {
-      setTimeout(() => simulateButtonClick(userId, 2), 2000); // 抽第3张牌
-    }
+    // 💡 测试模拟交互
+    if (hash === 'test_tx_001') await simulateButtonClick(userId, 2);
+    if (hash === 'test_tx_002') await simulateButtonClick(userId, 2);
+    if (hash === 'test_tx_004') await simulateButtonClick(userId, 1);
+    if (hash === 'test_tx_005') await simulateButtonClick(userId, 1);
 
     console.log(`[INFO] Message sent to Telegram ✅`);
   } catch (err) {
@@ -66,7 +81,7 @@ async function handleTransaction({ amount, hash, isSuccess = true }) {
   }
 }
 
-// ✅ 自动执行模拟交易
+// ⏱️ 执行模拟测试流程
 const testInterval = setInterval(() => {
   if (testCount < testTransactions.length) {
     handleTransaction(testTransactions[testCount]);
@@ -75,4 +90,4 @@ const testInterval = setInterval(() => {
     clearInterval(testInterval);
     testMode = false;
   }
-}, 1000);
+}, 1200);
