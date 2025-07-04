@@ -1,45 +1,42 @@
-// utils/tarot-session.js
+// v1.0.11 - Session 模式：支持多轮抽牌与状态判断
+const sessions = {};
 
-const { generateThreeCardReading } = require('./tarot');
-
-const sessionMap = new Map();
-
-function startSession(userId) {
-  const reading = generateThreeCardReading();
-  sessionMap.set(userId, {
-    cards: reading,
-    revealed: [false, false, false],
-  });
+function startSession(userId, isPremium = false) {
+  sessions[userId] = {
+    cards: [],
+    complete: false,
+    premium: isPremium,
+  };
 }
 
 function getCard(userId, index) {
-  const session = sessionMap.get(userId);
-  if (!session || session.revealed[index]) return null;
-  session.revealed[index] = true;
-  return session.cards[index];
+  const session = sessions[userId];
+  if (!session || index < 0 || index > 2) return null;
+
+  const existing = session.cards[index];
+  if (existing) return existing;
+
+  const newCard = Math.floor(Math.random() * 78) + 1;
+  session.cards[index] = newCard;
+
+  if (session.cards.filter(Boolean).length === 3) {
+    session.complete = true;
+  }
+
+  return newCard;
 }
 
 function isSessionComplete(userId) {
-  const session = sessionMap.get(userId);
-  return session && session.revealed.every(Boolean);
+  return sessions[userId]?.complete || false;
 }
 
-function getFullReading(userId) {
-  const session = sessionMap.get(userId);
-  if (!session) return null;
-  const [card1, card2, card3] = session.cards;
-  return (
-    `🔮 Your Full Tarot Reading:\n\n` +
-    `🃏 Past – ${card1.name} (${card1.orientation})\n${card1.meaning}\n\n` +
-    `🃏 Present – ${card2.name} (${card2.orientation})\n${card2.meaning}\n\n` +
-    `🃏 Future – ${card3.name} (${card3.orientation})\n${card3.meaning}\n\n` +
-    `✨ Trust the path ahead. You are being divinely guided.`
-  );
+function isPremium(userId) {
+  return sessions[userId]?.premium || false;
 }
 
 module.exports = {
   startSession,
   getCard,
   isSessionComplete,
-  getFullReading,
+  isPremium,
 };
