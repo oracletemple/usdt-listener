@@ -39,11 +39,10 @@ async function sendTarotButtons(chatId) {
   }
 }
 
-// ✅ 处理按钮互动逻辑
+// ✅ 处理点击按钮后返回塔罗牌解读
 async function handleDrawCard(callbackQuery) {
   const { message, data, from } = callbackQuery;
   const chatId = message.chat.id;
-  const userId = from.id;
 
   const cardIndex = {
     draw_1: 0,
@@ -58,20 +57,34 @@ async function handleDrawCard(callbackQuery) {
 
   const text = `🃏 *${label}* – *${card.name}* ${card.reversed ? '(Reversed)' : ''}\n_${card.meaning}_`;
 
+  // 显示抽到的牌
   await axios.post(`${apiUrl}/sendMessage`, {
     chat_id: chatId,
     text,
     parse_mode: 'Markdown',
   });
 
-  // ✅ 确认按钮点击成功（清除 loading 状态）
+  // 清除按钮“转圈”状态
   await axios.post(`${apiUrl}/answerCallbackQuery`, {
     callback_query_id: callbackQuery.id,
   });
+}
+
+// ✅ 新增：模拟触发点击某个塔罗按钮（测试用）
+async function simulateButtonClick(userId, cardKey = 'draw_1') {
+  try {
+    await axios.post(`https://tarot-handler.onrender.com/draw/${cardKey}`, {
+      userId: userId.toString(),
+    });
+    console.log(`[SIMULATE] Button ${cardKey} triggered for user ${userId}`);
+  } catch (err) {
+    console.error('[ERROR] Failed to simulate button click:', err.message);
+  }
 }
 
 module.exports = {
   sendMessage,
   sendTarotButtons,
   handleDrawCard,
+  simulateButtonClick, // ✅ 加入导出
 };
