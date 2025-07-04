@@ -1,96 +1,71 @@
-// v1.0.11
+// v1.0.11 - 主入口，处理 webhook 与按钮模拟点击
 require('dotenv').config();
 const express = require('express');
-const axios = require('axios');
 const bodyParser = require('body-parser');
+const axios = require('axios');
+const { sendMessage } = require('./utils/telegram');
+const { getCardImage, getCardName } = require('./utils/tarot');
+const { startSession, getCard, isSessionComplete } = require('./utils/tarot-session');
 
-const { sendTarotButtons, sendCustomReading } = require('./utils/telegram');
 const app = express();
 app.use(bodyParser.json());
 
-const PORT = process.env.PORT || 3000;
-const BOT_TOKEN = process.env.BOT_TOKEN;
-const WEBHOOK_URL = process.env.WEBHOOK_URL;
-const AMOUNT_THRESHOLD = parseFloat(process.env.AMOUNT_THRESHOLD || '10');
-
-let testModeExecuted = false;
-
 app.post('/webhook', async (req, res) => {
-  const tx = req.body;
+  const body = req.body;
+  if (body.callback_query) {
+    const { id, data, message, from } = body.callback_query;
+    const userId = from.id;
+    const cardIndex = parseInt(data.split('_')[1]);
 
-  const userId = process.env.RECEIVER_ID;
-  const amount = parseFloat(tx.amount);
+    const cardNumber = getCard(userId, cardIndex);
+    if (!cardNumber) {
+      return res.sendStatus(200);
+    }
 
-  try {
-    if (amount >= 30) {
-      await sendCustomReading(userId, tx.hash, amount, true);
-    } else if (amount >= AMOUNT_THRESHOLD) {
-      await sendTarotButtons(userId, tx.hash, true);
+    const image = getCardImage(cardNumber);
+    const name = getCardName(cardNumber);
+    await axios.post(`https://api.telegram.org/bot${process.env.BOT_TOKEN}/sendPhoto`, {
+      chat_id: userId,
+      photo: image,
+      caption: `🃏 You drew: *${name}*`,
+      parse_mode: 'Markdown',
+    });
+
+    res.sendStatus(200);
+  } else if (body.message) {
+    const { chat, text } = body.message;
+    if (text.startsWith('/start')) {
+      await sendMessage(chat.id, '🔮 Welcome to Tarot Oracle!');
     }
     res.sendStatus(200);
-  } catch (err) {
-    console.error('[ERROR] Failed to process webhook:', err.message);
-    res.sendStatus(500);
+  } else {
+    res.sendStatus(200);
   }
 });
 
-app.get('/simulate-click', async (req, res) => {
-  const { userId, index } = req.query;
+app.post('/simulate-click', async (req, res) => {
+  const { userId, messageId, index } = req.body;
   try {
-    const clickRes = await axios.post(`${WEBHOOK_URL}/draw-card`, {
-      userId,
-      index: parseInt(index, 10),
+    await axios.post(`https://api.telegram.org/bot${process.env.BOT_TOKEN}/answerCallbackQuery`, {
+      callback_query_id: 'simulate',
     });
-    res.send(`Simulate click success: ${clickRes.statusText}`);
+
+    await axios.post(`https://tarot-handler.onrender.com/webhook`, {
+      callback_query: {
+        id: 'simulate',
+        from: { id: userId },
+        message: { message_id: messageId },
+        data: `card_${index}`,
+      },
+    });
+
+    res.json({ ok: true });
   } catch (err) {
-    console.error('[ERROR] Simulate click failed:', err.message);
-    res.status(500).send(err.message);
+    console.error('[ERROR] simulateClick failed:', err.message);
+    res.status(500).json({ error: err.message });
   }
 });
 
-app.listen(PORT, async () => {
-  console.log(`🚀 Tarot Webhook Server running at http://localhost:${PORT}`);
-
-  if (!testModeExecuted) {
-    testModeExecuted = true;
-    console.log('[TEST] Running testTransactions...');
-
-    const txs = [
-      { hash: 'test_tx_001', amount: 12 },
-      { hash: 'test_tx_002', amount: 12 },
-      { hash: 'test_tx_003', amount: 12 },
-      { hash: 'test_tx_004', amount: 30 },
-      { hash: 'test_tx_005', amount: 30 },
-      { hash: 'test_tx_006', amount: 30 },
-    ];
-
-    for (let i = 0; i < txs.length; i++) {
-      const tx = txs[i];
-      try {
-        const userId = process.env.RECEIVER_ID;
-        if (tx.amount >= 30) {
-          await sendCustomReading(userId, tx.hash, tx.amount, true);
-        } else {
-          await sendTarotButtons(userId, tx.hash, true);
-        }
-        console.log(`[INFO] Message sent for ${tx.hash}`);
-      } catch (e) {
-        console.error(`[ERROR] Failed to send for ${tx.hash}:`, e.message);
-      }
-
-      // 只模拟前两个点击
-      if ((i === 0 || i === 1 || i === 3 || i === 4)) {
-        try {
-          const clickIndex = i % 3; // 模拟点击三张牌之一
-          await axios.get(`${WEBHOOK_URL}/simulate-click`, {
-            params: { userId: process.env.RECEIVER_ID, index: clickIndex },
-          });
-        } catch (e) {
-          console.error('[ERROR] Simulate click failed:', e.message);
-        }
-      }
-    }
-
-    console.log('[INFO] Test mode complete. Now entering live mode.');
-  }
+app.listen(3000, () => {
+  console.log('🚀 Tarot Webhook Server running at http://localhost:3000');
 });
