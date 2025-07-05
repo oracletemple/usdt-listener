@@ -1,12 +1,11 @@
-// v1.1.0 - usdt-listener/index.js
+// v1.1.0 - usdt-listener/index.js (auto-filled with RECEIVER_ID + AMOUNT_THRESHOLD)
 
-require("dotenv").config();
 const express = require("express");
 const bodyParser = require("body-parser");
 const { simulateClick } = require("./utils/simulate-click");
 
-const RECEIVER_ID = process.env.RECEIVER_ID; // Telegram user ID
-const AMOUNT_THRESHOLD = parseFloat(process.env.AMOUNT_THRESHOLD || "10");
+const RECEIVER_ID = 7685088782; // ✅ 自动注入 Telegram 用户 ID
+const AMOUNT_THRESHOLD = 10;    // ✅ 自动注入最低金额门槛
 
 const app = express();
 app.use(bodyParser.json());
@@ -47,7 +46,7 @@ app.post("/webhook", (req, res) => {
   res.sendStatus(200);
 });
 
-const PORT = process.env.PORT || 3001;
+const PORT = 10000; // ✅ 固定监听端口（Render 会忽略）
 app.listen(PORT, () => {
   console.log(`USDT listener running on port ${PORT}`);
 });
