@@ -1,59 +1,81 @@
-// v1.1.2
+// index.js
+// v1.1.3 - 修复 12USDT 自动交互与模拟按钮一致性问题
+
 require('dotenv').config();
+const axios = require('axios');
 const { sendMessage, sendTarotButtons, simulateButtonClick } = require('./utils/telegram');
 const { startSession } = require('./utils/tarot-session');
 
+const wallet = process.env.WALLET_ADDRESS;
 const userId = process.env.RECEIVER_ID;
-let testMode = true;
-let testCount = 0;
+const amountThreshold = parseFloat(process.env.AMOUNT_THRESHOLD || '10');
 
+const notifiedTxs = new Set();
+let testCount = 0;
+let testMode = true;
+
+// ✅ 模拟交易（含自动模拟点击按钮）
 const testTransactions = [
-  { amount: 12, hash: 'test_tx_001' },
-  { amount: 12, hash: 'test_tx_002' },
-  { amount: 12, hash: 'test_tx_003' },
-  { amount: 30, hash: 'test_tx_004' },
-  { amount: 30, hash: 'test_tx_005' },
-  { amount: 30, hash: 'test_tx_006' }
+  { amount: 12, hash: 'test_tx_001' }, // 自动点击
+  { amount: 12, hash: 'test_tx_002' }, // 自动点击
+  { amount: 12, hash: 'test_tx_003' }, // 留作手动测试
+  { amount: 30, hash: 'test_tx_004' }, // 自动点击
+  { amount: 30, hash: 'test_tx_005' }, // 自动点击
+  { amount: 30, hash: 'test_tx_006' }, // 留作手动测试
 ];
 
-async function handleTransaction({ amount, hash }) {
-  if (!userId) return;
+// 🌟 主逻辑
+async function handleTransaction({ amount, hash, isSuccess = true }) {
+  if (notifiedTxs.has(hash)) return;
+  notifiedTxs.add(hash);
 
-  let message = `💸 Payment received:\n\n💰 Amount: ${amount} USDT\n🔗 Tx Hash: ${hash}\n`;
+  console.log(`[TEST] Simulated Tx: ${hash} -> ${amount} USDT`);
 
-  if (amount >= 29.9) {
+  let message = `💸 Payment ${isSuccess ? 'received' : 'failed'}:\n\n`;
+  message += `💰 Amount: ${amount} USDT\n`;
+  message += `🔗 Tx Hash: ${hash}\n`;
+
+  if (!isSuccess) {
+    message += `\n⚠️ Transaction failed. Please verify on-chain.`;
+  } else if (amount >= 29.9) {
     message += `\n🧠 You unlocked *Custom Oracle Reading*.\nPlease reply with your question.\n\n🔮 Also receive a 3-card Tarot Reading:`;
+  } else if (amount >= amountThreshold) {
+    message += `\n🔮 Please focus and draw 3 cards:\n👇 Tap to reveal your Tarot Reading:`;
   } else {
-    message += `\n🔮 Please focus your energy and draw 3 cards...\n👇 Tap below to begin:`;
+    message += `\n⚠️ Payment below threshold (${amountThreshold} USDT). Not processed.`;
   }
+
+  if (testMode) message = `🧪 [TEST MODE]\n\n` + message;
 
   try {
     await sendMessage(userId, message);
-    startSession(userId);
-    await sendTarotButtons(userId);
 
-    if (hash === 'test_tx_001' || hash === 'test_tx_002') {
-      setTimeout(() => simulateButtonClick(userId, 'card_3'), 2000);
-    }
-    if (hash === 'test_tx_004' || hash === 'test_tx_005') {
-      setTimeout(() => simulateButtonClick(userId, 'card_3'), 2000);
+    // 🔮 自动开启 session 并发送按钮（只要达到门槛金额）
+    if (amount >= amountThreshold) {
+      startSession(userId);
+      await sendTarotButtons(userId);
     }
 
-    console.log(`[INFO] Message sent for ${hash}`);
+    // 模拟按钮点击逻辑
+    const simulateNeeded = ['test_tx_001', 'test_tx_002', 'test_tx_004', 'test_tx_005'].includes(hash);
+    if (simulateNeeded) {
+      setTimeout(() => simulateButtonClick(userId, 'card_3'), 3000);
+    }
+
+    console.log(`[INFO] Message + buttons sent ✅`);
   } catch (err) {
-    console.error(`[ERROR] ${hash}:`, err.message);
+    console.error(`[ERROR] Failed to send message: ${err.message}`);
   }
 }
 
-const interval = setInterval(() => {
+// ⏱️ 只跑一次测试
+const testInterval = setInterval(() => {
   if (testCount < testTransactions.length) {
     handleTransaction(testTransactions[testCount]);
     testCount++;
   } else {
-    clearInterval(interval);
+    clearInterval(testInterval);
     testMode = false;
     console.log('[INFO] Test mode complete. Now entering live mode.');
   }
 }, 1500);
-
-console.log('🚀 Tarot Webhook Server running at http://localhost:3000');
