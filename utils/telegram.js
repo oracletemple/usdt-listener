@@ -1,29 +1,32 @@
-// v1.1.5
-const { Telegraf } = require('telegraf');
-require('dotenv').config();
+// v1.1.0 - utils/telegram.js
 
-const bot = new Telegraf(process.env.BOT_TOKEN);
+const axios = require("axios");
+const BOT_TOKEN = process.env.BOT_TOKEN;
+const API_URL = `https://api.telegram.org/bot${BOT_TOKEN}`;
 
-async function initTelegramBot() {
-  const webhookUrl = process.env.WEBHOOK_URL;
-  if (!webhookUrl) {
-    console.error('❌ Missing WEBHOOK_URL in .env');
-    return;
-  }
-  await bot.telegram.setWebhook(webhookUrl);
-  console.log('✅ Telegram Webhook registered at:', webhookUrl);
-}
-
-async function handleTelegramUpdate(update) {
+async function sendMessage(chatId, text) {
   try {
-    await bot.handleUpdate(update);
-  } catch (err) {
-    console.error('❌ Failed to process Telegram update:', err);
+    await axios.post(`${API_URL}/sendMessage`, {
+      chat_id: chatId,
+      text: text,
+      parse_mode: "Markdown"
+    });
+  } catch (error) {
+    console.error("Error sending message:", error.response?.data || error.message);
   }
 }
 
-module.exports = {
-  bot,
-  initTelegramBot,
-  handleTelegramUpdate,
-};
+async function sendPhoto(chatId, imageUrl, caption = "") {
+  try {
+    await axios.post(`${API_URL}/sendPhoto`, {
+      chat_id: chatId,
+      photo: imageUrl,
+      caption: caption,
+      parse_mode: "Markdown"
+    });
+  } catch (error) {
+    console.error("Error sending photo:", error.response?.data || error.message);
+  }
+}
+
+module.exports = { sendMessage, sendPhoto };
