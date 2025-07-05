@@ -1,16 +1,29 @@
-// utils/telegram.js · v1.1.5
+// v1.1.5
 const { Telegraf } = require('telegraf');
-const { createWebhook } = require('telegraf/lib/server/express');
+require('dotenv').config();
 
 const bot = new Telegraf(process.env.BOT_TOKEN);
 
-// ➕ 可添加付款成功后的通知等逻辑
-bot.start((ctx) => ctx.reply('💰 Welcome to the USDT Listener Bot!'));
+async function initTelegramBot() {
+  const webhookUrl = process.env.WEBHOOK_URL;
+  if (!webhookUrl) {
+    console.error('❌ Missing WEBHOOK_URL in .env');
+    return;
+  }
+  await bot.telegram.setWebhook(webhookUrl);
+  console.log('✅ Telegram Webhook registered at:', webhookUrl);
+}
 
-const webhookCallback = createWebhook(bot);
+async function handleTelegramUpdate(update) {
+  try {
+    await bot.handleUpdate(update);
+  } catch (err) {
+    console.error('❌ Failed to process Telegram update:', err);
+  }
+}
 
-bot.telegram.setWebhook(`${process.env.WEBHOOK_URL}`).then(() => {
-  console.log('✅ Webhook set:', process.env.WEBHOOK_URL);
-}).catch(console.error);
-
-module.exports = { bot, webhookCallback };
+module.exports = {
+  bot,
+  initTelegramBot,
+  handleTelegramUpdate,
+};
