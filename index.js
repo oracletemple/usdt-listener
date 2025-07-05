@@ -1,14 +1,28 @@
-// index.js · v1.1.5
+// v1.1.5
 require('dotenv').config();
 const express = require('express');
-const { bot, webhookCallback } = require('./utils/telegram');
+const bodyParser = require('body-parser');
+const { handleTelegramUpdate, initTelegramBot } = require('./utils/telegram');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-app.use(express.json());
-app.use('/webhook', webhookCallback);
+// Parse Telegram updates
+app.use(bodyParser.json());
 
-app.listen(PORT, () => {
-  console.log(`🚀 USDT Listener Webhook Server running at http://localhost:${PORT}`);
+// Telegram Webhook handler
+app.post('/webhook', async (req, res) => {
+  try {
+    await handleTelegramUpdate(req.body);
+    res.sendStatus(200);
+  } catch (err) {
+    console.error('❌ Webhook handler error:', err);
+    res.sendStatus(500);
+  }
+});
+
+// Start server
+app.listen(PORT, async () => {
+  console.log(`🚀 USDT Listener Webhook server running at http://localhost:${PORT}`);
+  await initTelegramBot(); // Register webhook at startup
 });
