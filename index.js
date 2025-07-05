@@ -1,49 +1,28 @@
-// v1.1.3 - index.js
+// v1.0.13
 const express = require("express");
 const bodyParser = require("body-parser");
-const { sendCardButtons, handleTransaction } = require("./utils/telegram");
-const { startSession, getCard, isSessionComplete } = require("./utils/tarot-session");
+const { handleTransaction } = require("./utils/telegram");
 
 const app = express();
+const PORT = process.env.PORT || 10000;
+
 app.use(bodyParser.json());
 
-const PORT = process.env.PORT || 3000;
-
-// ✅ Webhook 接口入口：处理交易通知或按钮点击
 app.post("/webhook", async (req, res) => {
-  const body = req.body;
-
-  // 🧾 情况一：按钮点击事件
-  if (body.callback_query) {
-    await handleTransaction({ callback_query: body.callback_query });
-
-    const userId = body.callback_query.from.id;
-    const data = body.callback_query.data;
-
-    const cardIndex = parseInt(data.replace("card_", ""));
-    if (isNaN(cardIndex)) return res.sendStatus(200);
-
-    const result = await getCard(userId, cardIndex);
-    console.log("Card Drawn:", result.text);
-    return res.sendStatus(200);
+  const { amount, hash } = req.body;
+  if (!amount || !hash) {
+    return res.status(400).send("Missing amount or hash");
   }
 
-  // 💸 情况二：链上转账成功，启动新会话并发送按钮
-  if (body.transaction && body.transaction.to === "TYQQ3QigecskEi4B41BKDoTsmZf9BaFTbU") {
-    const { amount, from } = body.transaction;
-    const userId = body.transaction.user_id; // 后续模拟或真实交易中需携带
-
-    if (amount >= 10) {
-      await startSession(userId);
-      await sendCardButtons(userId);
-    }
-    return res.sendStatus(200);
+  try {
+    await handleTransaction({ amount, hash });
+    res.send("Transaction processed");
+  } catch (err) {
+    console.error("[Webhook] Error processing transaction:", err.message);
+    res.status(500).send("Error");
   }
-
-  res.sendStatus(200);
 });
 
-// ✅ 启动服务
 app.listen(PORT, () => {
   console.log(`Tarot service running on port ${PORT}`);
 });
