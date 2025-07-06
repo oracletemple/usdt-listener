@@ -1,4 +1,4 @@
-// G_tarot.js - v1.1.3
+// G_tarot.js - v1.1.2
 
 const { getCard } = require("./G_tarot-session");
 const cardData = require("./G_card-data");
