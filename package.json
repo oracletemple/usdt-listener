@@ -1,8 +1,9 @@
 {
   "name": "usdt-listener",
-  "version": "1.1.4",
+  "version": "1.2.0",
   "description": "Webhook service for listening to USDT transactions and handling tarot logic.",
   "main": "index.js",
+  "type": "module",
   "scripts": {
     "start": "node index.js"
   },
