@@ -1,50 +1,41 @@
-// index.js  // v1.1.9
-
-require('dotenv').config();
-const express = require('express');
-const bodyParser = require('body-parser');
-const {
-  sendButtonMessage,
-  handleCallbackQuery
-} = require('./utils/telegram');
-const { startSession } = require('./utils/tarot-session');
+// index.js - v1.1.9
+import express from 'express';
+import bodyParser from 'body-parser';
+import { sendButtonMessage, handleCallbackQuery } from './utils/telegram.js';
+import { startSession } from './utils/tarot-session.js';
 
 const app = express();
 app.use(bodyParser.json());
 
-const PORT = process.env.PORT || 3000;
-const THRESHOLD = parseFloat(process.env.AMOUNT_THRESHOLD || 10);
-const RECEIVER_ID = process.env.RECEIVER_ID;
-
-// Webhook endpoint
 app.post('/webhook', async (req, res) => {
-  const { user_id, amount, data } = req.body;
+  const { user_id, amount } = req.body;
 
-  // 如果是按钮回调请求
-  if (data) {
-    await handleCallbackQuery(user_id, data);
-    return res.sendStatus(200);
+  if (!user_id || !amount || amount < 10) {
+    console.log(`⚠️ Invalid or low amount received: ${amount}`);
+    return res.sendStatus(400);
   }
 
-  // 如果是付款请求
-  if (user_id && amount && amount >= THRESHOLD) {
-    console.log(`✅ Session started for ${user_id}`);
-    await startSession(user_id);
+  console.log(`✅ Session started for ${user_id}`);
+  await startSession(user_id);
 
-    const message = '✨ Thank you for your payment. Please draw your cards:';
-    await sendButtonMessage(user_id, message);
-    return res.sendStatus(200);
+  const message = '✨ Thank you for your payment. Please draw your cards:';
+  await sendButtonMessage(user_id, message);
+  res.sendStatus(200);
+});
+
+app.post('/callback', async (req, res) => {
+  try {
+    const { callback_query } = req.body;
+    if (!callback_query) return res.sendStatus(200);
+
+    await handleCallbackQuery(callback_query);
+    res.sendStatus(200);
+  } catch (error) {
+    console.error('❌ Callback error:', error);
+    res.sendStatus(500);
   }
-
-  console.warn(`⚠️ Invalid or low amount received: ${amount}`);
-  res.sendStatus(400);
 });
 
-// Root route
-app.get('/', (req, res) => {
-  res.send('🧙 Tarot Webhook is active.');
-});
-
-app.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`);
+app.listen(3000, () => {
+  console.log('Server running on port 3000');
 });
