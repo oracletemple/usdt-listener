@@ -3,54 +3,44 @@
 require("dotenv").config();
 const express = require("express");
 const bodyParser = require("body-parser");
-const axios = require("axios");
 
-const { sendButtons } = require("./utils/B_send-message");
+const handleTransaction = require("./A_transaction-listener");
+const simulateButtonClick = require("./utils/G_simulate-click");
 
 const app = express();
 app.use(bodyParser.json());
 
-const PORT = process.env.PORT || 10000;
-const RECEIVER_ID = parseInt(process.env.RECEIVER_ID); // Telegram user ID
-const AMOUNT_THRESHOLD = parseFloat(process.env.AMOUNT_THRESHOLD || "10");
-
-/**
- * 检查 TRC20 交易是否为有效支付（12 或 30 USDT）
- * @param {Object} tx - 来自链上监听服务的交易对象
- */
-function isValidPayment(tx) {
-  return (
-    tx.to &&
-    tx.to.toLowerCase() === process.env.WALLET_ADDRESS.toLowerCase() &&
-    parseFloat(tx.amount) >= AMOUNT_THRESHOLD
-  );
-}
-
-// ✅ Webhook 接收链上交易（模拟链上监听服务推送数据）
-app.post("/txhook", async (req, res) => {
-  const tx = req.body;
-  console.log("📥 Received transaction:", tx);
-
-  if (!isValidPayment(tx)) {
-    console.log("⚠️ Invalid or low-value transaction.");
-    return res.sendStatus(200);
-  }
-
-  const amount = parseFloat(tx.amount);
-  const userId = RECEIVER_ID;
-
+// ✅ Webhook 接口（链上交易通知）或模拟测试触发
+app.post("/webhook", async (req, res) => {
   try {
-    // ✅ 推送按钮消息（客户自己点击抽牌）
-    await sendButtons(userId, amount);
-    console.log(`✅ Pushed buttons for ${amount} USDT`);
+    const update = req.body;
+    console.log("📥 Received webhook payload:", JSON.stringify(update, null, 2));
+    await handleTransaction(update);
     res.sendStatus(200);
   } catch (err) {
-    console.error("❌ Failed to send buttons:", err);
+    console.error("❌ Webhook error:", err);
     res.sendStatus(500);
   }
 });
 
-// ✅ 启动服务
+// ✅ 测试入口：/simulate?userId=xxx&cardIndex=1&amount=12
+app.get("/simulate", async (req, res) => {
+  const { userId, cardIndex, amount } = req.query;
+  if (!userId || !cardIndex || !amount) {
+    return res.status(400).send("❌ Missing parameters");
+  }
+
+  try {
+    await simulateButtonClick(Number(userId), Number(cardIndex), Number(amount));
+    res.send("✅ Simulated button click");
+  } catch (err) {
+    console.error("❌ Simulation error:", err);
+    res.status(500).send("Simulation failed");
+  }
+});
+
+// 🚀 启动监听服务
+const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
-  console.log(`🚀 USDT Listener running on port ${PORT}`);
+  console.log(`🚀 usdt-listener running on port ${PORT}`);
 });
