@@ -1,84 +1,58 @@
-// telegram.js  // v1.2.1
+// utils/telegram.js  // v1.2.3
 
 const axios = require('axios');
-const { drawCards, formatCardMessage } = require('./tarot-engine');
-const { startSession, getCard, isSessionComplete, endSession } = require('./tarot-session');
+const { getCard, isSessionComplete, clearSession } = require('./tarot-session');
+const { formatCardMessage } = require('./tarot-engine');
 
 const BOT_TOKEN = process.env.BOT_TOKEN;
-const TELEGRAM_API = `https://api.telegram.org/bot${BOT_TOKEN}`;
+const API_URL = `https://api.telegram.org/bot${BOT_TOKEN}`;
 
-async function sendMessage(chatId, text, options = {}) {
-  return axios.post(`${TELEGRAM_API}/sendMessage`, {
-    chat_id: chatId,
+async function sendMessage(userId, text, options = {}) {
+  return axios.post(`${API_URL}/sendMessage`, {
+    chat_id: userId,
     text,
     parse_mode: 'HTML',
     ...options,
   });
 }
 
-async function sendButtonMessage(chatId, text) {
-  const replyMarkup = {
-    inline_keyboard: [
-      [
-        { text: '🃏 Card 1', callback_data: 'card_0' },
-        { text: '🃏 Card 2', callback_data: 'card_1' },
-        { text: '🃏 Card 3', callback_data: 'card_2' }
-      ]
-    ]
-  };
+async function sendButtonMessage(userId, text) {
+  const buttons = [
+    [{ text: '🃏 Card 1', callback_data: 'card_0' }],
+    [{ text: '🃏 Card 2', callback_data: 'card_1' }],
+    [{ text: '🃏 Card 3', callback_data: 'card_2' }]
+  ];
 
-  return axios.post(`${TELEGRAM_API}/sendMessage`, {
-    chat_id: chatId,
+  return axios.post(`${API_URL}/sendMessage`, {
+    chat_id: userId,
     text,
     parse_mode: 'HTML',
-    reply_markup: replyMarkup,
+    reply_markup: {
+      inline_keyboard: buttons
+    }
   });
 }
 
-async function handleCallbackQuery(callbackQuery) {
-  const { message, from, data, id } = callbackQuery;
-  const userId = from.id;
-  const chatId = message.chat.id;
-  const messageId = message.message_id;
-
-  if (!data.startsWith('card_')) return;
-
+async function handleCallbackQuery(userId, data) {
   const index = parseInt(data.split('_')[1]);
-  if (isNaN(index)) return;
-
   const card = getCard(userId, index);
   if (!card) {
-    return answerCallback(id, '⚠️ Session not found. Please try again later.');
+    await sendMessage(userId, '⚠️ Session not found. Please try again later.');
+    return;
   }
 
-  const response = formatCardMessage(card, index);
-  await answerCallback(id);
-  await sendMessage(chatId, response);
+  console.log(`🎴 Card ${index} drawn by ${userId}`);
+  const message = formatCardMessage(card, index);
+  await sendMessage(userId, message);
 
   if (isSessionComplete(userId)) {
-    await endSession(userId);
-    await removeInlineKeyboard(chatId, messageId);
+    console.log(`✅ Session complete for ${userId}`);
+    await clearSession(userId);
   }
-}
-
-async function answerCallback(callbackId, text = '') {
-  return axios.post(`${TELEGRAM_API}/answerCallbackQuery`, {
-    callback_query_id: callbackId,
-    text,
-    show_alert: false,
-  });
-}
-
-async function removeInlineKeyboard(chatId, messageId) {
-  return axios.post(`${TELEGRAM_API}/editMessageReplyMarkup`, {
-    chat_id: chatId,
-    message_id: messageId,
-    reply_markup: { inline_keyboard: [] },
-  });
 }
 
 module.exports = {
   sendMessage,
   sendButtonMessage,
-  handleCallbackQuery,
+  handleCallbackQuery
 };
