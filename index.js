@@ -1,41 +1,50 @@
-// index.js  // v1.1.8
+// index.js  // v1.1.9
 
 require('dotenv').config();
 const express = require('express');
 const bodyParser = require('body-parser');
-const { sendButtonMessage } = require('./utils/telegram');
+const {
+  sendButtonMessage,
+  handleCallbackQuery
+} = require('./utils/telegram');
 const { startSession } = require('./utils/tarot-session');
-const { handleCallbackQuery } = require('./utils/telegram');
 
 const app = express();
 app.use(bodyParser.json());
 
+const PORT = process.env.PORT || 3000;
+const THRESHOLD = parseFloat(process.env.AMOUNT_THRESHOLD || 10);
 const RECEIVER_ID = process.env.RECEIVER_ID;
-const AMOUNT_THRESHOLD = parseFloat(process.env.AMOUNT_THRESHOLD || '10');
 
+// Webhook endpoint
 app.post('/webhook', async (req, res) => {
-  const body = req.body;
+  const { user_id, amount, data } = req.body;
 
-  if (body.callback_query) {
-    await handleCallbackQuery(body.callback_query);
+  // 如果是按钮回调请求
+  if (data) {
+    await handleCallbackQuery(user_id, data);
     return res.sendStatus(200);
   }
 
-  const { user_id, amount } = body;
-  if (!user_id || !amount || amount < AMOUNT_THRESHOLD) {
-    return res.status(400).send('Invalid payment');
+  // 如果是付款请求
+  if (user_id && amount && amount >= THRESHOLD) {
+    console.log(`✅ Session started for ${user_id}`);
+    await startSession(user_id);
+
+    const message = '✨ Thank you for your payment. Please draw your cards:';
+    await sendButtonMessage(user_id, message);
+    return res.sendStatus(200);
   }
 
-  startSession(user_id);
-  await sendButtonMessage(user_id, '✨ Thank you for your payment. Please draw your cards:');
-  res.sendStatus(200);
+  console.warn(`⚠️ Invalid or low amount received: ${amount}`);
+  res.sendStatus(400);
 });
 
+// Root route
 app.get('/', (req, res) => {
-  res.send('Tarot webhook active.');
+  res.send('🧙 Tarot Webhook is active.');
 });
 
-const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
 });
