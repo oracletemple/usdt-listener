@@ -1,20 +1,18 @@
 {
-  "name": "tarot-handler",
-  "version": "1.2.0",
-  "description": "Telegram webhook service for Tarot interaction",
-  "main": "index.js",
+  "name": "usdt-listener",
+  "version": "1.0.0",
+  "description": "USDT listener to trigger tarot sessions via Telegram",
+  "main": "A_index.js",
   "scripts": {
-    "start": "node index.js"
+    "start": "node A_index.js"
   },
-  "type": "module",
   "dependencies": {
     "axios": "^1.6.7",
     "body-parser": "^1.20.2",
-    "dotenv": "^16.4.5",
-    "express": "^4.18.2",
-    "node-fetch": "^3.3.2"
+    "dotenv": "^16.3.1",
+    "express": "^4.18.2"
   },
   "engines": {
-    "node": ">=18.0.0"
+    "node": ">=18"
   }
 }
