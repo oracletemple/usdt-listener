@@ -1,32 +1,36 @@
-// index.js - v1.1.9
+// index.js - v1.2.0 (Clean Webhook Version, No Simulation)
 import express from 'express';
 import bodyParser from 'body-parser';
-import { sendButtonMessage } from './utils/telegram.js';
 import dotenv from 'dotenv';
+import { sendButtonMessage } from './utils/telegram.js';
 
 dotenv.config();
 const app = express();
+const PORT = process.env.PORT || 3000;
+
 app.use(bodyParser.json());
 
 app.post('/webhook', async (req, res) => {
   const { user_id, amount } = req.body;
 
   if (!user_id || !amount) {
-    console.warn('⚠️ Missing user_id or amount');
-    return res.status(400).send('Missing user_id or amount');
+    console.log('⚠️ Missing user_id or amount');
+    return res.status(400).send('Missing data');
   }
 
-  if (amount >= 10) {
-    console.log(`✅ Received ${amount} USDT from ${user_id}`);
-    await sendButtonMessage(user_id, amount);
+  console.log(`✅ Received ${amount} USDT from ${user_id}`);
+
+  if (amount >= 10 && amount < 20) {
+    await sendButtonMessage(user_id, 'basic');
+  } else if (amount >= 20) {
+    await sendButtonMessage(user_id, 'premium');
   } else {
-    console.warn(`⚠️ Invalid or low amount received: ${amount}`);
+    console.log(`⚠️ Received ${amount} USDT, which is below the minimum threshold.`);
   }
 
   res.send('OK');
 });
 
-const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
 });
