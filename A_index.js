@@ -1,4 +1,4 @@
-// A_index.js — v1.2.0
+// A_index.js — v1.2.1
 // usdt-listener Webhook entry: handles incoming payment notifications and routes to Telegram
 require('dotenv').config();
 const express = require('express');
@@ -54,18 +54,16 @@ app.post('/webhook', async (req, res) => {
     });
 
     // Prompt to draw cards based on plan
-    // Basic plan uses 12 USDT logic; premium uses 30
-    const cardsCount = paid >= parseFloat(AMOUNT_THRESHOLD_UPGRADE) ? 30 : 12;
     await axios.post(`${API_URL}/sendMessage`, {
       chat_id: chatId,
       text: '🃏 Please draw your cards:',
-      reply_markup: JSON.stringify({
+      reply_markup: {
         inline_keyboard: [
-          [{ text: '🃏 Card 1', callback_data: `card_0` }],
-          [{ text: '🃏 Card 2', callback_data: `card_1` }],
-          [{ text: '🃏 Card 3', callback_data: `card_2` }]
+          [{ text: '🃏 Card 1', callback_data: 'card_0' }],
+          [{ text: '🃏 Card 2', callback_data: 'card_1' }],
+          [{ text: '🃏 Card 3', callback_data: 'card_2' }]
         ]
-      })
+      }
     });
 
   } catch (err) {
