@@ -1,4 +1,5 @@
-const TAROT_HANDLER_URL = process.env.TAROT_HANDLER_URL || "https://your-tarot-handler-domain.com"; // ⚠️ 改成你的实际 tarot-handler 地址
+const UPGRADE_AMOUNT = 24;
+const TOLERANCE = 0.05; // 允许小误差
 
 app.post("/webhook", async (req, res) => {
   try {
@@ -9,22 +10,17 @@ app.post("/webhook", async (req, res) => {
     const wallet = fromAddress;
     const chatId = getUser(wallet);
 
-    // 1. 如果已登记，直接发抽牌按钮
+    // 1. 如果已登记，自动升级&发抽牌按钮
     if (chatId) {
-      // 【自动升级】如果是补差价金额，自动请求 tarot-handler 升级
-      if (paid === 24) {
+      // 补差价/高级自动升级
+      if (Math.abs(paid - UPGRADE_AMOUNT) < TOLERANCE) {
         try {
-          // 通知 tarot-handler 进行升级
-          await axios.post(`${TAROT_HANDLER_URL}/mark-premium`, {
-            chatId,
-            wallet
-          });
+          await axios.post(`${TAROT_HANDLER_URL}/mark-premium`, { chatId });
         } catch (err) {
           console.error("[Upgrade notify error]", err.response?.data || err.message);
         }
       }
-
-      // 继续正常发牌
+      // 继续推送抽牌按钮
       await axios.post(`${API_URL}/sendMessage`, {
         chat_id: chatId,
         text: `🙏 Received ${paid} USDT (fees included). Please draw your cards:`,
