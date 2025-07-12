@@ -1,44 +1,58 @@
-// A_index.js — v1.2.3
-// usdt-listener: polls for USDT transfers and notifies Telegram by wallet mapping
-require('dotenv').config();
-const { getUSDTTransactions } = require('./utils/G_transaction');
-const { sendButtons, sendText } = require('./utils/G_send-message');
-const { getUser, addPending } = require('./utils/G_wallet-map');
+// A_index.js — v1.2.4
+// usdt-listener: handles incoming USDT payment webhooks and routes draw buttons by wallet mapping
+require("dotenv").config();
+const express = require("express");
+const bodyParser = require("body-parser");
+const axios = require("axios");
+const { getUser, addPending } = require("./utils/G_wallet-map");
 
+const BOT_TOKEN      = process.env.BOT_TOKEN;
+const RECEIVER_ID   = parseInt(process.env.RECEIVER_ID, 10);
 const WALLET_ADDRESS = process.env.WALLET_ADDRESS;
-const POLL_INTERVAL = parseInt(process.env.POLL_INTERVAL || '15000', 10);
+const API_URL       = `https://api.telegram.org/bot${BOT_TOKEN}`;
 
-const THRESHOLD_BASIC = parseFloat(process.env.AMOUNT_THRESHOLD_BASIC);
-const THRESHOLD_UPGRADE = parseFloat(process.env.AMOUNT_THRESHOLD_UPGRADE);
+const app = express();
+app.use(bodyParser.json());
 
-let lastSeenTx = null;
-
-async function pollTransactions() {
+app.post("/webhook", async (req, res) => {
   try {
-    const transactions = await getUSDTTransactions(WALLET_ADDRESS, lastSeenTx);
-    for (const { txid, from, amount } of transactions) {
-      lastSeenTx = txid;
-      // Determine recipient Telegram chatId
-      const chatId = getUser(from);
-      if (chatId) {
-        // 已登记用户：立即发送抽牌按钮
-        await sendText(chatId, `🙏 Received ${amount} USDT (fees included). Please draw your cards:`);
-        await sendButtons(chatId, '🃏 Please draw your cards:', [
-          [{ text: '🃏 Card 1', callback_data: 'card_0' }],
-          [{ text: '🃏 Card 2', callback_data: 'card_1' }],
-          [{ text: '🃏 Card 3', callback_data: 'card_2' }]
-        ]);
-      } else {
-        // 未登记：缓存为 pending
-        addPending(from, { amount, txid });
-      }
+    const { toAddress, fromAddress, amount, txid } = req.body;
+    if (toAddress !== WALLET_ADDRESS) return res.sendStatus(200);
+
+    const paid   = parseFloat(amount);
+    const wallet = fromAddress;
+    const chatId = getUser(wallet);
+
+    if (chatId) {
+      // Registered user: send draw buttons immediately
+      await axios.post(`${API_URL}/sendMessage`, {
+        chat_id: chatId,
+        text: `🙏 Received ${paid} USDT (fees included). Please draw your cards:`,
+        parse_mode: "MarkdownV2"
+      });
+      await axios.post(`${API_URL}/sendMessage`, {
+        chat_id: chatId,
+        text: "🃏 Please draw your cards:",
+        parse_mode: "MarkdownV2",
+        reply_markup: {
+          inline_keyboard: [
+            [{ text: "🃏 Card 1", callback_data: "card_0" }],
+            [{ text: "🃏 Card 2", callback_data: "card_1" }],
+            [{ text: "🃏 Card 3", callback_data: "card_2" }]
+          ]
+        }
+      });
+    } else {
+      // Not registered yet: queue as pending
+      addPending(wallet, { amount: paid, txid });
     }
   } catch (err) {
-    console.error('[pollTransactions error]', err);
+    console.error("[Payment webhook error]", err);
   }
-}
+  res.sendStatus(200);
+});
 
-// 启动轮询
-pollTransactions();
-setInterval(pollTransactions, POLL_INTERVAL);
-console.log(`⏳ Polling ${WALLET_ADDRESS} every ${POLL_INTERVAL}ms for USDT transactions`);
+const PORT = process.env.PORT || 3000;
+app.listen(PORT, () => {
+  console.log(`🚀 usdt-listener running on port ${PORT}`);
+});
