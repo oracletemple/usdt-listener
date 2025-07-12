@@ -1,18 +1,4 @@
-// A_index.js — v1.2.4
-// usdt-listener: handles incoming USDT payment webhooks and routes draw buttons by wallet mapping
-require("dotenv").config();
-const express = require("express");
-const bodyParser = require("body-parser");
-const axios = require("axios");
-const { getUser, addPending } = require("./utils/G_wallet-map");
-
-const BOT_TOKEN      = process.env.BOT_TOKEN;
-const RECEIVER_ID   = parseInt(process.env.RECEIVER_ID, 10);
-const WALLET_ADDRESS = process.env.WALLET_ADDRESS;
-const API_URL       = `https://api.telegram.org/bot${BOT_TOKEN}`;
-
-const app = express();
-app.use(bodyParser.json());
+const TAROT_HANDLER_URL = process.env.TAROT_HANDLER_URL || "https://your-tarot-handler-domain.com"; // ⚠️ 改成你的实际 tarot-handler 地址
 
 app.post("/webhook", async (req, res) => {
   try {
@@ -23,8 +9,22 @@ app.post("/webhook", async (req, res) => {
     const wallet = fromAddress;
     const chatId = getUser(wallet);
 
+    // 1. 如果已登记，直接发抽牌按钮
     if (chatId) {
-      // Registered user: send draw buttons immediately
+      // 【自动升级】如果是补差价金额，自动请求 tarot-handler 升级
+      if (paid === 24) {
+        try {
+          // 通知 tarot-handler 进行升级
+          await axios.post(`${TAROT_HANDLER_URL}/mark-premium`, {
+            chatId,
+            wallet
+          });
+        } catch (err) {
+          console.error("[Upgrade notify error]", err.response?.data || err.message);
+        }
+      }
+
+      // 继续正常发牌
       await axios.post(`${API_URL}/sendMessage`, {
         chat_id: chatId,
         text: `🙏 Received ${paid} USDT (fees included). Please draw your cards:`,
@@ -43,16 +43,10 @@ app.post("/webhook", async (req, res) => {
         }
       });
     } else {
-      // Not registered yet: queue as pending
       addPending(wallet, { amount: paid, txid });
     }
   } catch (err) {
     console.error("[Payment webhook error]", err);
   }
   res.sendStatus(200);
-});
-
-const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => {
-  console.log(`🚀 usdt-listener running on port ${PORT}`);
 });
