@@ -1,7 +1,7 @@
 // A_index.js — v1.2.2
 // usdt-listener service: polls for USDT transactions and pushes Telegram messages
 require('dotenv').config();
-const { getUSDTTransactions } = require('./utils/G_transaction');
+const getUSDTTransactions = require('./utils/G_transaction');
 const { sendButtons, sendText } = require('./utils/G_send-message');
 
 const WALLET_ADDRESS = process.env.WALLET_ADDRESS;
