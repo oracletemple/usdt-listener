@@ -1,50 +1,79 @@
-// A_index.js - v1.1.3
+// A_index.js — v1.2.0
+// usdt-listener Webhook entry: handles incoming payment notifications and routes to Telegram
+require('dotenv').config();
+const express = require('express');
+const bodyParser = require('body-parser');
+const axios = require('axios');
 
-require("dotenv").config();
-const express = require("express");
-const bodyParser = require("body-parser");
+// Load env vars
+const {
+  BOT_TOKEN,
+  RECEIVER_ID,
+  WALLET_ADDRESS,
+  PRICE_BASIC,
+  PRICE_PREMIUM,
+  UPGRADE_PRICE,
+  AMOUNT_THRESHOLD_BASIC,
+  AMOUNT_THRESHOLD_PREMIUM,
+  AMOUNT_THRESHOLD_UPGRADE,
+} = process.env;
 
-const { getUSDTTransactions } = require("./utils/G_transaction");
-const { sendButtons } = require("./utils/G_send-message");
-
-const WALLET_ADDRESS = process.env.WALLET_ADDRESS;
-const RECEIVER_ID = process.env.RECEIVER_ID;
-const AMOUNT_THRESHOLD = parseFloat(process.env.AMOUNT_THRESHOLD || "10");
+const API_URL = `https://api.telegram.org/bot${BOT_TOKEN}`;
 
 const app = express();
 app.use(bodyParser.json());
 
-// ✅ Webhook 主入口（监听 USDT 转账消息）
-app.post("/webhook", async (req, res) => {
+app.post('/webhook', async (req, res) => {
+  const { toAddress, amount } = req.body; // ensure payload includes these
+  if (toAddress !== WALLET_ADDRESS) return res.sendStatus(200);
+
+  const chatId = RECEIVER_ID;
+  const paid = parseFloat(amount);
+
   try {
-    const transactions = await getUSDTTransactions(WALLET_ADDRESS);
+    let text;
+    let drawAmount;
 
-    for (const tx of transactions) {
-      const { sender, amount } = tx;
-
-      if (amount >= AMOUNT_THRESHOLD) {
-        console.log(`✅ Detected valid payment: ${amount} USDT from ${sender}`);
-
-        // 🎯 推送按钮消息（由 tarot-handler Webhook 处理）
-        const buttons = [[
-          { text: "🃏 Card 1", callback_data: "card_1_" + amount },
-          { text: "🃏 Card 2", callback_data: "card_2_" + amount },
-          { text: "🃏 Card 3", callback_data: "card_3_" + amount }
-        ]];
-
-        await sendButtons(RECEIVER_ID, "🧿 Your spiritual reading is ready. Please choose a card to reveal:", buttons);
-      }
+    // Determine plan based on thresholds
+    if (paid >= parseFloat(AMOUNT_THRESHOLD_UPGRADE)) {
+      text = `🙏 Received upgrade payment of ${paid} USDT (fees included). Activating Premium Plan…`;
+      drawAmount = parseFloat(PRICE_PREMIUM);
+    } else if (paid >= parseFloat(AMOUNT_THRESHOLD_BASIC)) {
+      text = `🙏 Received basic payment of ${paid} USDT (fees included). Activating Basic Plan…`;
+      drawAmount = parseFloat(PRICE_BASIC);
+    } else {
+      // Insufficient amount
+      return res.sendStatus(200);
     }
 
-    res.sendStatus(200);
+    // Notify user
+    await axios.post(`${API_URL}/sendMessage`, {
+      chat_id: chatId,
+      text,
+      parse_mode: 'MarkdownV2'
+    });
+
+    // Prompt to draw cards based on plan
+    // Basic plan uses 12 USDT logic; premium uses 30
+    const cardsCount = paid >= parseFloat(AMOUNT_THRESHOLD_UPGRADE) ? 30 : 12;
+    await axios.post(`${API_URL}/sendMessage`, {
+      chat_id: chatId,
+      text: '🃏 Please draw your cards:',
+      reply_markup: JSON.stringify({
+        inline_keyboard: [
+          [{ text: '🃏 Card 1', callback_data: `card_0` }],
+          [{ text: '🃏 Card 2', callback_data: `card_1` }],
+          [{ text: '🃏 Card 3', callback_data: `card_2` }]
+        ]
+      })
+    });
+
   } catch (err) {
-    console.error("❌ Webhook error:", err);
-    res.sendStatus(500);
+    console.error('[Payment webhook error]', err);
   }
+
+  res.sendStatus(200);
 });
 
-// 🚀 启动监听服务
-const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => {
-  console.log(`🚀 USDT Listener running on port ${PORT}`);
-});
+const port = process.env.PORT || 3000;
+app.listen(port, () => console.log(`usdt-listener running on port ${port}`));
