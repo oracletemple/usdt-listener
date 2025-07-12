@@ -1,77 +1,55 @@
-// A_index.js — v1.2.1
-// usdt-listener Webhook entry: handles incoming payment notifications and routes to Telegram
+// A_index.js — v1.2.2
+// usdt-listener service: polls for USDT transactions and pushes Telegram messages
 require('dotenv').config();
-const express = require('express');
-const bodyParser = require('body-parser');
-const axios = require('axios');
+const { getUSDTTransactions } = require('./utils/G_transaction');
+const { sendButtons, sendText } = require('./utils/G_send-message');
 
-// Load env vars
-const {
-  BOT_TOKEN,
-  RECEIVER_ID,
-  WALLET_ADDRESS,
-  PRICE_BASIC,
-  PRICE_PREMIUM,
-  UPGRADE_PRICE,
-  AMOUNT_THRESHOLD_BASIC,
-  AMOUNT_THRESHOLD_PREMIUM,
-  AMOUNT_THRESHOLD_UPGRADE,
-} = process.env;
+const WALLET_ADDRESS = process.env.WALLET_ADDRESS;
+const RECEIVER_ID = process.env.RECEIVER_ID;
+const POLL_INTERVAL = parseInt(process.env.POLL_INTERVAL || '15000', 10);
 
-const API_URL = `https://api.telegram.org/bot${BOT_TOKEN}`;
+const THRESHOLD_BASIC = parseFloat(process.env.AMOUNT_THRESHOLD_BASIC);
+const THRESHOLD_PREMIUM = parseFloat(process.env.AMOUNT_THRESHOLD_PREMIUM);
+const THRESHOLD_UPGRADE = parseFloat(process.env.AMOUNT_THRESHOLD_UPGRADE);
 
-const app = express();
-app.use(bodyParser.json());
+let lastSeenTx = null;
 
-app.post('/webhook', async (req, res) => {
-  const { toAddress, amount } = req.body; // ensure payload includes these
-  if (toAddress !== WALLET_ADDRESS) return res.sendStatus(200);
-
-  const chatId = RECEIVER_ID;
-  const paid = parseFloat(amount);
-
+async function pollTransactions() {
   try {
-    let text;
-    let drawAmount;
+    const transactions = await getUSDTTransactions(WALLET_ADDRESS, lastSeenTx);
+    for (const tx of transactions) {
+      const { txid, from, amount } = tx;
+      // remember last processed tx
+      lastSeenTx = txid;
 
-    // Determine plan based on thresholds
-    if (paid >= parseFloat(AMOUNT_THRESHOLD_UPGRADE)) {
-      text = `🙏 Received upgrade payment of ${paid} USDT (fees included). Activating Premium Plan…`;
-      drawAmount = parseFloat(PRICE_PREMIUM);
-    } else if (paid >= parseFloat(AMOUNT_THRESHOLD_BASIC)) {
-      text = `🙏 Received basic payment of ${paid} USDT (fees included). Activating Basic Plan…`;
-      drawAmount = parseFloat(PRICE_BASIC);
-    } else {
-      // Insufficient amount
-      return res.sendStatus(200);
-    }
+      if (amount < THRESHOLD_BASIC) continue;
 
-    // Notify user
-    await axios.post(`${API_URL}/sendMessage`, {
-      chat_id: chatId,
-      text,
-      parse_mode: 'MarkdownV2'
-    });
+      const chatId = RECEIVER_ID;
+      let promptText = '';
 
-    // Prompt to draw cards based on plan
-    await axios.post(`${API_URL}/sendMessage`, {
-      chat_id: chatId,
-      text: '🃏 Please draw your cards:',
-      reply_markup: {
-        inline_keyboard: [
-          [{ text: '🃏 Card 1', callback_data: 'card_0' }],
-          [{ text: '🃏 Card 2', callback_data: 'card_1' }],
-          [{ text: '🃏 Card 3', callback_data: 'card_2' }]
-        ]
+      if (amount >= THRESHOLD_UPGRADE) {
+        promptText = `🙏 Received upgrade payment of ${amount} USDT (fees included). Activating Premium Plan…`;
+      } else if (amount >= THRESHOLD_BASIC) {
+        promptText = `🙏 Received basic payment of ${amount} USDT (fees included). Activating Basic Plan…`;
       }
-    });
+      // send notification
+      await sendText(chatId, promptText);
 
+      // prompt to draw cards
+      const buttons = [
+        [{ text: '🃏 Card 1', callback_data: 'card_0' }],
+        [{ text: '🃏 Card 2', callback_data: 'card_1' }],
+        [{ text: '🃏 Card 3', callback_data: 'card_2' }]
+      ];
+      await sendButtons(chatId, '🃏 Please draw your cards:', buttons);
+    }
   } catch (err) {
-    console.error('[Payment webhook error]', err);
+    console.error('[pollTransactions error]', err);
   }
+}
 
-  res.sendStatus(200);
-});
+// start polling
+pollTransactions();
+setInterval(pollTransactions, POLL_INTERVAL);
 
-const port = process.env.PORT || 3000;
-app.listen(port, () => console.log(`usdt-listener running on port ${port}`));
+console.log(`⏳ Polling ${WALLET_ADDRESS} every ${POLL_INTERVAL}ms for USDT transactions`);
